@@ -1,6 +1,9 @@
 # Uses a lightweight Node.js version
 FROM node:20-alpine
 
+# Installs OpenSSL required by Prisma
+RUN apk add --no-cache openssl
+
 # Sets the working directory inside the container
 WORKDIR /app
 

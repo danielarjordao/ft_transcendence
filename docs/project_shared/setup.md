@@ -75,3 +75,12 @@ npm install -D @tailwindcss/vite
 
 - [ ] Configure Docker and `docker-compose.yml` in the root directory.
 - [ ] Connect Prisma to the local PostgreSQL database via Docker.
+
+# 1. Atualize a lista de pacotes do sistema
+sudo apt update
+
+# 2. Instale o Docker e o plugin do Docker Compose
+sudo apt install docker.io docker-compose-v2 -y
+
+# 3. Dê permissão para o seu usuário rodar o Docker (evita ter que usar 'sudo' toda hora)
+sudo usermod -aG docker $USER
