@@ -1,0 +1,45 @@
+version: '3.8' # Docker Compose version
+
+services:
+  db: # PostgreSQL database service
+    image: postgres:15-alpine # Official PostgreSQL image
+    container_name: transcendence_db # Container name
+    ports:
+      - "5432:5432" # Default PostgreSQL port
+    environment:
+      POSTGRES_USER: transcendence_user # Database user
+      POSTGRES_PASSWORD: transcendence_password # Database password
+      POSTGRES_DB: transcendence_db # Database name
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Volume for data persistence
+
+  backend: # Backend service (NestJS)
+    build:
+      context: ./backend # Backend code directory
+    container_name: transcendence_backend # Container name
+    ports:
+      - "3000:3000" # API port
+    volumes:
+      - ./backend:/app # Mounts local code into the container
+      - /app/node_modules # Ensures container's node_modules
+    environment:
+      DATABASE_URL: "postgresql://transcendence_user:transcendence_password@db:5432/transcendence_db?schema=public" # Database connection URL
+    depends_on:
+      - db # Starts only after the database is ready
+
+  frontend: # Frontend service (React)
+    build:
+      context: ./frontend # Frontend code directory
+    container_name: transcendence_frontend # Container name
+    ports:
+      - "5173:5173" # Frontend port (Vite)
+    volumes:
+      - ./frontend:/app # Mounts local code into the container
+      - /app/node_modules # Ensures container's node_modules
+    environment:
+      VITE_API_URL: "http://localhost:3000" # API URL for the frontend
+    depends_on:
+      - backend # Starts only after the backend is ready
+
+volumes:
+  pgdata: # Named volume for database persistence
