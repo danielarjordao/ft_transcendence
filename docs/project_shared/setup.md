@@ -1,6 +1,6 @@
 # Environment Setup & Initialization Guide
 
-This document details the exact steps and commands used to initialize the `ft_transcendence` monorepo. If you need to recreate the project or understand how the foundation was built, follow this guide.
+This document details the exact steps and commands used to initialize the `ft_transcendence` monorepo. If you need to recreate the project, understand how the foundation was built, or set it up on a new machine, follow this guide.
 
 ## 1. Project Root & Documentation
 
@@ -23,35 +23,25 @@ npx @nestjs/cli new backend --skip-git --package-manager npm
 **Commands executed inside the `/backend` folder:**
 
 ```bash
-# Install Prisma as a development dependency
-npm install prisma --save-dev
+# Install Prisma v5 (v7 causes issues with Alpine Linux without extra adapters)
+npm install prisma@5 @prisma/client@5
 
 # Initialize Prisma (creates the prisma/schema.prisma and .env files)
 npx prisma init
 
 ```
 
-## 3. Frontend Initialization (React + Vite)
+*Critical Backend Configurations:*
 
-The frontend is built with React and TypeScript, bootstrapped via Vite for faster performance.
+- **OpenSSL:** Added `RUN apk add --no-cache openssl` to the backend `Dockerfile` to allow Prisma to connect to the database securely from inside the Alpine container.
+- **CORS:** Enabled CORS in `backend/src/main.ts` using `app.enableCors()` to allow the frontend to fetch data from the backend API.
 
-**Commands executed in the root folder:**
-
-```bash
-# Generate the React + TypeScript boilerplate
-npm create vite@latest frontend -- --template react-ts
-
-```
-
-Excelente ideia! Documentar esse ajuste da versão nova do Tailwind vai poupar muita dor de cabeça para o Lucas quando ele for mexer no código. Manter a documentação viva é a melhor prática possível.
-
-Abra o seu arquivo `docs/general_planning/environment_setup.md` e substitua a seção **3. Frontend Initialization** e o **Next Steps** por este texto atualizado:
-
-```markdown
 ## 3. Frontend Initialization (React + Vite + Tailwind CSS)
+
 The frontend is built with React and TypeScript, bootstrapped via Vite. We use Tailwind CSS (v4) for styling.
 
 **Commands executed in the root folder:**
+
 ```bash
 # Generate the React + TypeScript boilerplate
 npm create vite@latest frontend -- --template react-ts
@@ -66,12 +56,43 @@ npm install -D @tailwindcss/vite
 
 ```
 
-**Configuration changes made:**
+*Configuration changes made:*
 
 1. Updated `vite.config.ts` to include the `tailwindcss()` plugin.
 2. Cleared the default `src/index.css` and added only: `@import "tailwindcss";`
 
-## Next Steps (Pending)
+## 4. Docker Infrastructure & Database Setup
 
-- [ ] Configure Docker and `docker-compose.yml` in the root directory.
-- [ ] Connect Prisma to the local PostgreSQL database via Docker.
+The entire application (Frontend, Backend, and PostgreSQL Database) is containerized using Docker Compose.
+
+**Prerequisites (For Linux/Ubuntu users):**
+If you do not have Docker installed, run the following commands:
+
+```bash
+sudo apt update
+sudo apt install docker.io docker-compose-v2 -y
+
+# Grant your user permission to run Docker without sudo
+sudo usermod -aG docker $USER
+# Note: You must log out and log back in (or run 'newgrp docker') for the permission to take effect.
+
+```
+
+**How to run the project:**
+We use a `Makefile` in the root directory for standard 42 commands.
+
+```bash
+# To build and start all containers (Frontend, Backend, Database)
+make up
+
+# To stop and remove all containers cleanly
+make down
+
+```
+
+**Testing the Infrastructure:**
+Once the containers are running, you can test the end-to-end connection:
+
+1. **Frontend:** Access `http://localhost:5173`
+2. **Backend API:** Access `http://localhost:3000`
+3. **Database Connection:** Run `docker exec -it transcendence_backend npx prisma db push` to sync the schema, then access `http://localhost:3000/db-test` to verify PostgreSQL connectivity.

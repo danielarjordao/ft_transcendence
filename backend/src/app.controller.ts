@@ -9,4 +9,10 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
+
+  // New route to access the database test
+  @Get('db-test')
+  async getDbTest() {
+    return this.appService.testDatabaseConnection();
+  }
 }
