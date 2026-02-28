@@ -1,24 +1,30 @@
 NAME = ft_transcendence
 
-# Inicia o projeto construindo as imagens
+# Starts the project by building the images
 all: up
 
 up:
 	docker compose up --build
 
-# Desliga os conteineres sem apagar o banco de dados
+# Stops the containers (Database remains INTACT)
 down:
 	docker compose down
 
-# Desliga tudo e apaga os volumes (reseta o banco de dados)
+# Cleans Docker garbage, but PROTECTS the volumes (Database remains INTACT)
 clean:
-	docker compose down -v
+	docker compose down
+	docker system prune -f
 
-# Limpeza total: desliga tudo, apaga volumes, imagens e redes orfas
+# Deep Docker clean, but still PROTECTS the volumes
 fclean: clean
 	docker system prune -af
 
-# Reseta o projeto do zero
+# DANGER COMMAND: Deletes containers AND the database volumes
+reset-db:
+	docker compose down -v
+	@echo "Warning: The database has been completely reset!"
+
+# Resets the project from scratch (but without deleting the database)
 re: fclean all
 
-.PHONY: all up down clean fclean re
+.PHONY: all up down clean fclean reset-db re
