@@ -11,7 +11,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data # Volume for data persistence
 
-backend: # Backend service (NestJS)
+  backend: # Backend service (NestJS)
     build:
       context: ./backend # Backend code directory
     command: sh -c "sleep 3 && npx prisma db push && npm run start:dev" # Waits for the database, applies migrations, and starts the server
