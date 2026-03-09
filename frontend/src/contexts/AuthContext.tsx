@@ -1,7 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/auth';
-import { authService } from '../services/auth.service';
 
 interface AuthContextType {
   user: User | null;
@@ -15,16 +14,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) { setIsLoading(false); return; }
-    authService.getMe()
-      .then(setUser)
-      .catch(() => localStorage.removeItem('accessToken'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  const [isLoading, setIsLoading] = useState(false);
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('accessToken', token);
@@ -32,7 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    authService.logout();
+    localStorage.removeItem('accessToken');
     setUser(null);
   };
 
