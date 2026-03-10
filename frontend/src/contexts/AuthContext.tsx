@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/auth';
 
@@ -14,7 +14,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+
+  // TODO: reativar quando GET /api/users/me estiver pronto
+  // const [isLoading, setIsLoading] = useState(true);
+  // useEffect(() => { getMe().then(...).finally(() => setIsLoading(false)) }, []);
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('accessToken', token);
@@ -27,7 +30,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading: false, isAuthenticated: !!user, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
