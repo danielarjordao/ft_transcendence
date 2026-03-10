@@ -13,7 +13,19 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  // versão produção — reativar antes de commitar
+  // const [user, setUser] = useState<User | null>(null);
+
+  // versão teste local — comentar antes de commitar
+  const [user, setUser] = useState<User | null>({
+    id: '1',
+    fullName: 'Ana Laura',
+    username: 'ana',
+    email: 'ana@test.com',
+    avatarUrl: null,
+    accountType: 'standard',
+    createdAt: new Date().toISOString(),
+  });
 
   // TODO: reativar quando GET /api/users/me estiver pronto
   // const [isLoading, setIsLoading] = useState(true);

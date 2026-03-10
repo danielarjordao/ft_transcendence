@@ -3,6 +3,7 @@ export interface User {
   email: string;
   username: string;
   fullName: string;
+  bio?: string;
   avatarUrl: string | null;
   accountType: 'standard' | 'oauth_42' | 'oauth_google' | 'oauth_github';
   createdAt: string;
