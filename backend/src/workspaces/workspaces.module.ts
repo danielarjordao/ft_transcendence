@@ -1,11 +1,25 @@
 import { Module } from '@nestjs/common';
 import { WorkspacesController } from './workspaces.controller';
 import { WorkspacesService } from './workspaces.service';
+import { SubjectsController } from './subjects.controller';
+import { SubjectsService } from './subjects.service';
+import { FieldsController } from './fields.controller';
+import { FieldsService } from './fields.service';
+import { InvitationsController } from './invitations.controller';
+import { InvitationsService } from './invitations.service';
 
-// The WorkspacesModule is a NestJS module that encapsulates all components related to the "workspaces" feature, including the controller and service.
-// It organizes the code and allows for easy scalability as we add more features related to workspaces in the future.
 @Module({
-  controllers: [WorkspacesController],
-  providers: [WorkspacesService],
+  controllers: [
+    WorkspacesController,
+    SubjectsController,
+    FieldsController,
+    InvitationsController,
+  ],
+  providers: [
+    WorkspacesService,
+    SubjectsService,
+    FieldsService,
+    InvitationsService,
+  ],
 })
 export class WorkspacesModule {}
