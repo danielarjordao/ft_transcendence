@@ -1,10 +1,16 @@
-import { IsString, IsNotEmpty, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 
 // Enum to define allowed priority levels
 export enum TaskPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
 }
 
 export class CreateTaskDto {
@@ -16,15 +22,21 @@ export class CreateTaskDto {
   @IsOptional()
   description?: string;
 
-  // Identifies which workspace this task belongs to
   @IsString()
-  @IsNotEmpty()
-  workspaceId: string;
+  @IsOptional()
+  subjectId?: string;
 
-  // Identifies the column (e.g., 'To Do', 'In Progress')
   @IsString()
   @IsNotEmpty()
-  fieldId: string;
+  status: string;
+
+  @IsString()
+  @IsOptional()
+  assigneeId?: string;
+
+  @IsDateString()
+  @IsOptional()
+  dueDate?: string;
 
   @IsEnum(TaskPriority)
   @IsOptional()

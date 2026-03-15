@@ -7,40 +7,48 @@ import {
   Param,
   Delete,
   Query,
+  HttpCode,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-// MOCK: Importing Task interface for type safety in the controller responses
-// Will be replaced with actual Task entity/model when integrating with the database
-import type { Task } from './tasks.service';
+import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 
-@Controller('tasks')
+@Controller()
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
-  @Post()
-  create(@Body() createTaskDto: CreateTaskDto) {
-    return this.tasksService.create(createTaskDto);
+  // POST /workspaces/:wsId/tasks (API 5.2)
+  @Post('workspaces/:wsId/tasks')
+  create(@Param('wsId') wsId: string, @Body() createTaskDto: CreateTaskDto) {
+    return this.tasksService.create(wsId, createTaskDto);
   }
 
-  @Get()
-  findAll(@Query('workspaceId') workspaceId?: string): Task[] {
-    return this.tasksService.findAll(workspaceId);
+  // GET /workspaces/:wsId/tasks (API 5.1)
+  @Get('workspaces/:wsId/tasks')
+  findAll(@Param('wsId') wsId: string, @Query() query: ListTasksQueryDto) {
+    return this.tasksService.findAll(wsId, query);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string): Task {
-    return this.tasksService.findOne(id);
+  // GET /tasks/:taskId (API 5.3)
+  @Get('tasks/:taskId')
+  findOne(@Param('taskId') taskId: string) {
+    return this.tasksService.findOne(taskId);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTaskDto: UpdateTaskDto): Task {
-    return this.tasksService.update(id, updateTaskDto);
+  // PATCH /tasks/:taskId (API 5.4)
+  @Patch('tasks/:taskId')
+  update(
+    @Param('taskId') taskId: string,
+    @Body() updateTaskDto: UpdateTaskDto,
+  ) {
+    return this.tasksService.update(taskId, updateTaskDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string): Task {
-    return this.tasksService.remove(id);
+  // DELETE /tasks/:taskId (API 5.5)
+  @Delete('tasks/:taskId')
+  @HttpCode(204)
+  remove(@Param('taskId') taskId: string) {
+    return this.tasksService.remove(taskId);
   }
 }
