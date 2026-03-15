@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -91,11 +92,13 @@ function WorkspaceCard({ ws, onToggleStar }: {
   ws: typeof mockWorkspaces[0];
   onToggleStar: (id: string) => void;
 }) {
+const navigate = useNavigate();
   const [hov, setHov] = useState(false);
   const [starHov, setStarHov] = useState(false);
 
   return (
     <div
+onClick={() => navigate(`/board/${ws.id}`)}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
