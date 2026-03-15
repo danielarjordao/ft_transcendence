@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import reactLogo from './assets/react.svg'
 import viteLogo from '/vite.svg'
 import './App.css'
+import Navbar from './components/layout/Navbar';
 
 
 function App() {
@@ -18,7 +19,9 @@ function App() {
   }, []);
 
   return (
-    <>
+    <div className="min-h-screen bg-[#0f0f0f]">
+      <Navbar />
+      <div className="max-w-7xl mx-auto p-8">
       <div style={{ padding: '20px', fontFamily: 'sans-serif' }}>
         <h2>Integration Test: Frontend ↔ Backend</h2>
         <div style={{ padding: '10px', background: '#f0f0f0', borderRadius: '5px' }}>
@@ -46,7 +49,8 @@ function App() {
       <p className="read-the-docs">
         Click on the Vite and React logos to learn more
       </p>
-    </>
+    </div>
+    </div>
   )
 }
 
