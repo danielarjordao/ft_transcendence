@@ -91,3 +91,55 @@ To test POST requests and see the global `ValidationPipe` in action, we can use 
   curl -X POST http://localhost:3000/api/workspaces \
     -H "Content-Type: application/json" \
     -d '{"description": "A workspace without a name"}'
+
+## 9. NestJS CLI: Automatic Code Generation
+
+Instead of manually creating folders, modules, controllers, and services one by one, NestJS provides a powerful CLI (Command Line Interface) that behaves just like the Angular CLI.
+
+```bash
+npx nest generate resource <feature-name>
+```
+
+*(Example: `npx nest generate resource tasks`)*
+
+### What it does automatically
+
+1. **Creates the folder structure:** e.g., `/src/tasks`.
+2. **Generates the core files:** Controller, Service, Module, and testing (`.spec.ts`) files.
+3. **Generates DTOs & Entities:** Creates a `/dto` folder with `create-task.dto.ts` and `update-task.dto.ts`, plus an `/entities` folder.
+4. **Auto-Wiring:** Automatically imports the new `TasksModule` into the root `app.module.ts` so it works immediately.
+5. **CRUD Boilerplate:** If prompted, selecting "REST API" and "Y" for CRUD entry points will pre-write all the standard HTTP routes (GET, POST, PATCH, DELETE) in the Controller and the corresponding empty methods in the Service.
+
+**Note:** Sometimes running this command causes a peer dependency error (e.g., `ERESOLVE unable to resolve dependency tree`). This is just npm being overly cautious about package versions. Running the failed installation with `--legacy-peer-deps` fixes it.
+
+* **The "Id" Trap:** By default, the Nest CLI generates code assuming IDs are numbers. It adds a `+` prefix to params (e.g., `+id`) to cast them.
+* **The Fix:** Since we use string-based IDs (e.g., `task_123`), we must manually remove the `+` sign in the Controller to avoid `type mismatch` errors between the Controller and the Service.
+
+Here is the structured content for your `learning_notes.md` in English. I’ve organized it to reflect the specific technical hurdles we cleared today.
+
+## 10. Tasks Module & Advanced NestJS Concepts
+
+### Advanced DTOs & Partial Updates
+
+* **Validation Enums:** Using `enum` for fields like `Priority` (LOW, MEDIUM, HIGH) ensures the API strictly rejects any value outside the predefined set.
+* **The `PartialType` Helper:** * Found in `UpdateTaskDto`. It clones the `CreateTaskDto` but makes every field optional (`?`).
+* **Why it matters:** Essential for `PATCH` requests. It allows a user to update just one field (e.g., moving a task to a different column by changing only the `fieldId`) without being forced to resend the title or description.
+
+### TypeScript & Compilation Safety
+
+* **Interface vs. DTO:** * **DTOs** define what the user sends (input).
+* **Interfaces/Entities** define how the data is stored internally (input + generated fields like `id` and `createdAt`).
+
+* **The `import type` Requirement:** * When importing an interface into a Controller to type a return value (e.g., `: Task`), you must use `import type { Task } from ...`.
+* **Why?** Because of `isolatedModules` and `emitDecoratorMetadata` flags. It tells the compiler the import is purely for type-checking and shouldn't be treated as a JavaScript class at runtime.
+
+### Code Maintenance: The `// MOCK` Strategy
+
+* **Tagging for Refactoring:** Using a standardized `// MOCK:` comment in Services identifies temporary in-memory logic.
+* **The Roadmap:** This creates a "Search Map" for the future. When we integrate **Prisma**, we can simply search for the word `MOCK` and replace the array methods (`.find`, `.push`, `.filter`) with actual database queries (`prisma.task.findMany`, etc.).
+
+### API Testing Strategy
+
+* **GET Requests:** Use the browser for a quick visual check of the data.
+* **POST/PATCH/DELETE:** Use `curl` or an API Client (like Insomnia/Postman) to test logic that requires a Request Body or specific HTTP verbs.
+* **Validation Check:** Always try to send "bad data" (e.g., a task without a title) to ensure the `ValidationPipe` is correctly blocking invalid entries.
