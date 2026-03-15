@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import OAuthCallback from './pages/OAuthCallback';
+import KanbanBoard from './components/kanban/KanbanBoard';
 
 export default function App() {
   return (
@@ -29,6 +30,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/board/:workspaceId"
+            element={
+              <ProtectedRoute>
+                <KanbanBoard />
               </ProtectedRoute>
             }
           />
