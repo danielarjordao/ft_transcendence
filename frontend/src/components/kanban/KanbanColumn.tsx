@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TaskCard } from './TaskCard';
 import type { Task, Subject } from './TaskCard';
+import { EmptyState } from '../ui';
 
 interface KanbanColumnProps {
   fieldId: string;
@@ -118,15 +119,11 @@ export function KanbanColumn({
         ))}
 
         {tasks.length === 0 && (
-          <div style={{
-            padding: '20px 0',
-            textAlign: 'center',
-            color: '#3A3A3A',
-            fontSize: '12px',
-          }}>
-            No tasks here
-          </div>
-        )}
+        <EmptyState
+         title="No tasks here"
+         description="Drop a task here or click + to create one."
+         />
+)}
       </div>
     </div>
   );

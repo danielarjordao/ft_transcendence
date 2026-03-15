@@ -5,7 +5,7 @@ interface EmptyStateProps {
   action?: React.ReactNode;
 }
 
-export function EmptyState({ icon = '📭', title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div style={{
       display: 'flex',
@@ -16,7 +16,7 @@ export function EmptyState({ icon = '📭', title, description, action }: EmptyS
       textAlign: 'center',
       gap: '10px',
     }}>
-      <span style={{ fontSize: '32px', lineHeight: 1 }}>{icon}</span>
+      {icon && <span style={{ fontSize: '32px', lineHeight: 1 }}>{icon}</span>}
       <p style={{
         color: '#F5F5F5',
         fontSize: '14px',
