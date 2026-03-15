@@ -573,6 +573,7 @@ All non-2xx responses must follow this shape:
 
 * **Response (201 Created):** invitation object.
 * **Errors:** `404 not_found`, `409 workspace_member_exists`, `409 conflict`.
+* **Related Real-time Event(s):** `workspace_invitation_received` (to `user:{userId}`).
 
 ### 3.8 List My Workspace Invitations
 
@@ -605,12 +606,14 @@ All non-2xx responses must follow this shape:
 
 * **Response (200 OK):** updated member object.
 * **Errors:** `403 forbidden`, `404 not_found`, `422 invalid_state_transition`.
+* **Related Real-time Event(s):** `member_role_updated` (to `workspace:{wsId}`).
 
 ### 3.11 Remove Member
 
 * **DELETE** `/api/workspaces/:wsId/members/:memberId`
 * **Response (204 No Content)**
 * **Errors:** `403 forbidden`, `404 not_found`.
+* **Related Real-time Event(s):** `member_removed` (to `workspace:{wsId}`).
 
 ## 4. Workspace Configuration
 
@@ -632,6 +635,7 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (201 Created):** created subject object.
+* **Related Real-time Event(s):** `subject_created` (to `workspace:{wsId}`).
 
 ### 4.3 Update Subject
 
@@ -646,11 +650,13 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (200 OK):** updated subject object.
+* **Related Real-time Event(s):** `subject_updated` (to `workspace:{wsId}`).
 
 ### 4.4 Delete Subject
 
 * **DELETE** `/api/subjects/:subjectId`
 * **Response (204 No Content)**
+* **Related Real-time Event(s):** `subject_deleted` (to `workspace:{wsId}`).
 
 ### 4.5 List Fields
 
@@ -670,6 +676,7 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (201 Created):** created field object.
+* **Related Real-time Event(s):** `field_created` (to `workspace:{wsId}`).
 
 ### 4.7 Update Field
 
@@ -684,11 +691,13 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (200 OK):** updated field object.
+* **Related Real-time Event(s):** `field_updated` (to `workspace:{wsId}`).
 
 ### 4.8 Delete Field
 
 * **DELETE** `/api/fields/:fieldId`
 * **Response (204 No Content)**
+* **Related Real-time Event(s):** `field_deleted` (to `workspace:{wsId}`).
 
 ## 5. Tasks, Comments & Attachments
 
@@ -720,6 +729,7 @@ All non-2xx responses must follow this shape:
 
 * **Response (201 Created):** full task object.
 * **Errors:** `400 validation_error`, `403 forbidden`, `404 not_found`.
+* **Related Real-time Event(s):** `task_created` (to `workspace:{wsId}`).
 
 ### 5.3 Get Task Details
 
@@ -745,11 +755,13 @@ All non-2xx responses must follow this shape:
 
 * **Response (200 OK):** updated task object.
 * **Errors:** `400 validation_error`, `403 forbidden`, `404 not_found`, `422 invalid_state_transition`.
+* **Related Real-time Event(s):** `task_updated` and, when `status` changes, `task_moved` (to `workspace:{wsId}`).
 
 ### 5.5 Delete Task
 
 * **DELETE** `/api/tasks/:taskId`
 * **Response (204 No Content)**
+* **Related Real-time Event(s):** `task_deleted` (to `workspace:{wsId}`).
 
 ### 5.6 List Comments
 
@@ -781,6 +793,8 @@ All non-2xx responses must follow this shape:
 }
 ```
 
+* **Related Real-time Event(s):** `comment_added` (to `workspace:{wsId}`).
+
 ### 5.8 Update Comment
 
 * **PATCH** `/api/comments/:commentId`
@@ -793,11 +807,13 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (200 OK):** updated comment object.
+* **Related Real-time Event(s):** `comment_updated` (to `workspace:{wsId}`).
 
 ### 5.9 Delete Comment
 
 * **DELETE** `/api/comments/:commentId`
 * **Response (204 No Content)**
+* **Related Real-time Event(s):** `comment_deleted` (to `workspace:{wsId}`).
 
 ### 5.10 List Attachments
 
@@ -811,6 +827,7 @@ All non-2xx responses must follow this shape:
 * **Constraints:** Max 10MB per file. Types: PDF, PNG, JPG, JPEG, GIF.
 * **Response (201 Created):** array of uploaded attachment metadata.
 * **Errors:** `413 payload_too_large`, `415 unsupported_file_type`.
+* **Related Real-time Event(s):** `attachment_uploaded` (to `workspace:{wsId}`).
 
 ### 5.12 Download or Preview Attachment
 
@@ -821,6 +838,7 @@ All non-2xx responses must follow this shape:
 
 * **DELETE** `/api/attachments/:attachmentId`
 * **Response (204 No Content)**
+* **Related Real-time Event(s):** `attachment_deleted` (to `workspace:{wsId}`).
 
 ## 6. Chat & Notifications
 
@@ -859,6 +877,7 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (201 Created):** created message object.
+* **Related Real-time Event(s):** `receive_message` (to `user:{userId}`), plus `typing_start`/`typing_stop` while composing.
 
 ### 6.4 List Notifications
 
@@ -888,6 +907,7 @@ All non-2xx responses must follow this shape:
 ```
 
 * **Response (200 OK):** updated notification object.
+* **Related Real-time Event(s):** `notification_updated` (to `user:{userId}`).
 
 ### 6.7 Read All Notifications
 
@@ -899,6 +919,8 @@ All non-2xx responses must follow this shape:
   "updated": true
 }
 ```
+
+* **Related Real-time Event(s):** `notification_updated` (batch update to `user:{userId}`).
 
 ### 6.8 Delete Notification
 
