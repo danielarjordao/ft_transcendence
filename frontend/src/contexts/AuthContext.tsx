@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/auth';
 
@@ -13,8 +13,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // versão produção — reativar antes de commitar
+  // const [user, setUser] = useState<User | null>(null);
+
+  // versão teste local — comentar antes de commitar
+  const [user, setUser] = useState<User | null>({
+    id: '1',
+    fullName: 'Ana Laura',
+    username: 'ana',
+    email: 'ana@test.com',
+    avatarUrl: null,
+    accountType: 'standard',
+    createdAt: new Date().toISOString(),
+  });
+
+  // TODO: reativar quando GET /api/users/me estiver pronto
+  // const [isLoading, setIsLoading] = useState(true);
+  // useEffect(() => { getMe().then(...).finally(() => setIsLoading(false)) }, []);
+  const [isLoading] = useState(false);
 
   const login = (token: string, userData: User) => {
     localStorage.setItem('accessToken', token);
@@ -27,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading, isAuthenticated: !!user, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
