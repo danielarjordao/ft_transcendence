@@ -15,6 +15,7 @@ interface KanbanColumnProps {
   onDrop: (status: string) => void;
   onTaskClick: (task: Task) => void;
   onAddTask: (status: string) => void;
+  onDeleteField: (id: string) => void;
 }
 
 export function KanbanColumn({
@@ -29,6 +30,7 @@ export function KanbanColumn({
   onDrop,
   onTaskClick,
   onAddTask,
+  onDeleteField,
 }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -80,21 +82,20 @@ export function KanbanColumn({
           </span>
         </div>
 
-        <button
-          onClick={() => onAddTask(fieldId)}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#888888',
-            cursor: 'pointer',
-            fontSize: '18px',
-            lineHeight: 1,
-            padding: '2px 4px',
-            borderRadius: '4px',
-          }}
-        >
-          +
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            onClick={() => onAddTask(fieldId)}
+            style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '2px 4px', borderRadius: '4px' }}
+          >
+            +
+          </button>
+          <button
+            onClick={() => onDeleteField(fieldId)}
+            style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', lineHeight: 1, padding: '2px 4px', borderRadius: '4px' }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* lista de tasks */}
@@ -117,13 +118,12 @@ export function KanbanColumn({
             isDragging={draggingId === task.id}
           />
         ))}
-
         {tasks.length === 0 && (
-        <EmptyState
-         title="No tasks here"
-         description="Drop a task here or click + to create one."
-         />
-)}
+          <EmptyState
+            title="No tasks here"
+            description="Drop a task here or click + to create one."
+          />
+        )}
       </div>
     </div>
   );

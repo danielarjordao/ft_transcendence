@@ -17,21 +17,26 @@ const MOCK_SUBJECTS: Subject[] = [
 ];
 
 const MOCK_TASKS: Task[] = [
-  { id: 't1', title: 'Setup NestJS project',      subjectId: 's1', status: 'done',        priority: 'high',   assignee: 'murilo_db',   dueDate: '2025-03-10', attachments: [],                                          comments: [{ id: 'c1', author: 'murilo_db', text: 'Done!', ts: 'Mar 10' }], description: 'Initialize NestJS with TypeScript config.' },
-  { id: 't2', title: 'Design Prisma schema',       subjectId: 's1', status: 'done',        priority: 'high',   assignee: 'murilo_db',   dueDate: '2025-03-12', attachments: [],                                          comments: [], description: '' },
-  { id: 't3', title: 'JWT authentication',         subjectId: 's1', status: 'in_progress', priority: 'high',   assignee: 'daniela_be',  dueDate: '2025-03-20', attachments: [{ name: 'auth-flow.png', type: 'image' }],  comments: [{ id: 'c2', author: 'daniela_be', text: 'Working on refresh token logic.', ts: 'Mar 18' }], description: '' },
-  { id: 't4', title: 'Kanban board component',     subjectId: 's2', status: 'in_progress', priority: 'medium', assignee: 'lucas_dev',   dueDate: '2025-03-22', attachments: [],                                          comments: [], description: '' },
-  { id: 't5', title: 'Login page wireframe',       subjectId: 's2', status: 'done',        priority: 'low',    assignee: 'ana_laura',   dueDate: '2025-03-08', attachments: [{ name: 'wireframe-v1.png', type: 'image' }], comments: [], description: '' },
-  { id: 't6', title: 'Docker Compose setup',       subjectId: 's3', status: 'todo',        priority: 'high',   assignee: 'murilo_db',   dueDate: '2025-03-25', attachments: [],                                          comments: [], description: '' },
-  { id: 't7', title: 'Socket.io real-time events', subjectId: 's1', status: 'todo',        priority: 'high',   assignee: 'daniela_be',  dueDate: '2025-03-28', attachments: [],                                          comments: [], description: '' },
-  { id: 't8', title: 'Profile page UI',            subjectId: 's2', status: 'todo',        priority: 'medium', assignee: 'ana_laura',   dueDate: '2025-03-30', attachments: [],                                          comments: [], description: '' },
-  { id: 't9', title: 'CI/CD pipeline',             subjectId: 's3', status: 'todo',        priority: 'low',    assignee: undefined,     dueDate: undefined,    attachments: [],                                          comments: [], description: '' },
+  { id: 't1', title: 'Setup NestJS project',      subjectId: 's1', status: 'done',        priority: 'high',   assignee: 'murilo_db',  dueDate: '2025-03-10', attachments: [],                                           comments: [{ id: 'c1', author: 'murilo_db', text: 'Done!', ts: 'Mar 10' }], description: 'Initialize NestJS with TypeScript config.' },
+  { id: 't2', title: 'Design Prisma schema',       subjectId: 's1', status: 'done',        priority: 'high',   assignee: 'murilo_db',  dueDate: '2025-03-12', attachments: [],                                           comments: [], description: '' },
+  { id: 't3', title: 'JWT authentication',         subjectId: 's1', status: 'in_progress', priority: 'high',   assignee: 'daniela_be', dueDate: '2025-03-20', attachments: [{ name: 'auth-flow.png', type: 'image' }],   comments: [{ id: 'c2', author: 'daniela_be', text: 'Working on refresh token logic.', ts: 'Mar 18' }], description: '' },
+  { id: 't4', title: 'Kanban board component',     subjectId: 's2', status: 'in_progress', priority: 'medium', assignee: 'lucas_dev',  dueDate: '2025-03-22', attachments: [],                                           comments: [], description: '' },
+  { id: 't5', title: 'Login page wireframe',       subjectId: 's2', status: 'done',        priority: 'low',    assignee: 'ana_laura',  dueDate: '2025-03-08', attachments: [{ name: 'wireframe-v1.png', type: 'image' }], comments: [], description: '' },
+  { id: 't6', title: 'Docker Compose setup',       subjectId: 's3', status: 'todo',        priority: 'high',   assignee: 'murilo_db',  dueDate: '2025-03-25', attachments: [],                                           comments: [], description: '' },
+  { id: 't7', title: 'Socket.io real-time events', subjectId: 's1', status: 'todo',        priority: 'high',   assignee: 'daniela_be', dueDate: '2025-03-28', attachments: [],                                           comments: [], description: '' },
+  { id: 't8', title: 'Profile page UI',            subjectId: 's2', status: 'todo',        priority: 'medium', assignee: 'ana_laura',  dueDate: '2025-03-30', attachments: [],                                           comments: [], description: '' },
+  { id: 't9', title: 'CI/CD pipeline',             subjectId: 's3', status: 'todo',        priority: 'low',    assignee: undefined,    dueDate: undefined,    attachments: [],                                           comments: [], description: '' },
 ];
 
 const INITIAL_FIELDS = [
   { id: 'todo',        label: 'To Do',       color: '#888888' },
   { id: 'in_progress', label: 'In Progress', color: '#FFA500' },
   { id: 'done',        label: 'Done',        color: '#50C878' },
+];
+
+const PRESET_COLORS = [
+  '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
+  '#ff6b6b', '#E87D7D', '#9B8EC4', '#4ECDC4',
 ];
 
 // ── task detail modal ────────────────────────────────────────────────────────
@@ -62,7 +67,6 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
 
   return (
     <Modal open onClose={onClose} width={580}>
-      {/* subject header */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {subject && <span style={{ width: 9, height: 9, borderRadius: '50%', background: subject.color, flexShrink: 0 }} />}
@@ -76,7 +80,6 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           {task.title}
         </h2>
 
-        {/* metadata grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: '#2A2A2A', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
           {[
             { label: 'PRIORITY', value: <Badge variant={task.priority} /> },
@@ -93,7 +96,6 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           ))}
         </div>
 
-        {/* description */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '8px' }}>DESCRIPTION</p>
           <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>
@@ -101,7 +103,6 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           </p>
         </div>
 
-        {/* attachments */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>ATTACHMENTS</p>
           <div style={{ border: '1px dashed #3A3A3A', borderRadius: '6px', padding: '18px', textAlign: 'center', color: '#555555', fontSize: '12px' }}>
@@ -109,7 +110,6 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           </div>
         </div>
 
-        {/* comments */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>
             COMMENTS ({task.comments.length})
@@ -227,6 +227,101 @@ function CreateTaskModal({ initialStatus, subjects, onClose, onCreate }: {
   );
 }
 
+// ── add subject modal ────────────────────────────────────────────────────────
+
+function AddSubjectModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (subject: Subject) => void;
+}) {
+  const [name, setName]   = useState('');
+  const [color, setColor] = useState(PRESET_COLORS[0]);
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    onCreate({ id: `s${Date.now()}`, name: name.trim(), color });
+  };
+
+  return (
+    <Modal open onClose={onClose} title="New Subject" width={360}>
+      <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Input
+          label="Name"
+          placeholder="e.g. Design, QA, DevOps..."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+        />
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Color</label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {PRESET_COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span style={{ color: '#888888', fontSize: '12px' }}>Preview: </span>
+            <span style={{ color: '#F5F5F5', fontSize: '12px', fontWeight: 600 }}>{name || 'Subject name'}</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px' }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleCreate} disabled={!name.trim()}>Create Subject</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── add field modal ──────────────────────────────────────────────────────────
+
+function AddFieldModal({ onClose, onCreate }: {
+  onClose: () => void;
+  onCreate: (field: { id: string; label: string; color: string }) => void;
+}) {
+  const [name, setName]   = useState('');
+  const [color, setColor] = useState(PRESET_COLORS[0]);
+
+  const handleCreate = () => {
+    if (!name.trim()) return;
+    onCreate({
+      id: name.trim().toLowerCase().replace(/\s+/g, '_'),
+      label: name.trim(),
+      color,
+    });
+  };
+
+  return (
+    <Modal open onClose={onClose} title="New Field" width={360}>
+      <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <Input
+          label="Name"
+          placeholder="e.g. In Review, Blocked..."
+          value={name}
+          onChange={e => setName(e.target.value)}
+          autoFocus
+        />
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Color</label>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {PRESET_COLORS.map(c => (
+              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <div style={{ width: 32, height: 3, borderRadius: 2, background: color }} />
+            <span style={{ color: '#F5F5F5', fontSize: '12px', fontWeight: 600 }}>{name || 'Field name'}</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '4px' }}>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleCreate} disabled={!name.trim()}>Create Field</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ── main page ────────────────────────────────────────────────────────────────
 
 export default function KanbanBoard() {
@@ -237,11 +332,11 @@ export default function KanbanBoard() {
   const [createStatus, setCreateStatus] = useState<string | null>(null);
   const [search, setSearch]             = useState('');
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
+  const [showAddSubject, setShowAddSubject] = useState(false);
+  const [showAddField, setShowAddField]     = useState(false);
+  const [subjects, setSubjects] = useState<Subject[]>(MOCK_SUBJECTS);
+  const [fields, setFields]     = useState(INITIAL_FIELDS);
 
-  const fields   = INITIAL_FIELDS;
-  const subjects = MOCK_SUBJECTS;
-
-  // applies subject filter first, then search filter
   const visibleTasks = tasks
     .filter(t => activeSubject ? t.subjectId === activeSubject : true)
     .filter(t => search.trim() ? t.title.toLowerCase().includes(search.toLowerCase()) : true);
@@ -252,9 +347,7 @@ export default function KanbanBoard() {
     setDraggingId(null);
   };
 
-  const handleCreate = (task: Task) => {
-    setTasks(prev => [...prev, task]);
-  };
+  const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
 
   const handleUpdate = (updated: Task) => {
     setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
@@ -267,12 +360,9 @@ export default function KanbanBoard() {
       {/* workspace header */}
       <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div>
-          <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>
-            {workspaceId ?? 'ft_transcendence'}
-          </h1>
+          <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>{workspaceId ?? 'ft_transcendence'}</h1>
           <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>42 School final project</p>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <input
             value={search}
@@ -288,47 +378,37 @@ export default function KanbanBoard() {
 
       {/* subject tabs */}
       <div style={{ padding: '0 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-
-        {/* All tab */}
         <button
           onClick={() => setActiveSubject(null)}
-          style={{
-            padding: '10px 12px',
-            background: 'transparent',
-            border: 'none',
-            borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`,
-            color: activeSubject === null ? '#F5F5F5' : '#888888',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}>
+          style={{ padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`, color: activeSubject === null ? '#F5F5F5' : '#888888', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           All
         </button>
 
-        {/* subject tabs */}
         {subjects.map(s => (
-          <button
-            key={s.id}
-            onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)}
-            style={{
-              padding: '10px 12px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`,
-              color: activeSubject === s.id ? '#F5F5F5' : '#888888',
-              fontSize: '13px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '5px',
-            }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
-            {s.name}
-          </button>
+          <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
+            <button
+              onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)}
+              style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
+              {s.name}
+            </button>
+            <button
+              onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }}
+              style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>
+              ✕
+            </button>
+          </div>
         ))}
 
-        <button style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
+        <button
+          onClick={() => setShowAddSubject(true)}
+          style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
           + Add Subject
+        </button>
+        <button
+          onClick={() => setShowAddField(true)}
+          style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
+          + Add Field
         </button>
       </div>
 
@@ -336,25 +416,38 @@ export default function KanbanBoard() {
       <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
         <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
           {fields.map(f => (
-            <KanbanColumn
-              key={f.id}
-              fieldId={f.id}
-              label={f.label}
-              color={f.color}
-              tasks={visibleTasks.filter(t => t.status === f.id)}
-              subjects={subjects}
-              draggingId={draggingId}
-              onDragStart={setDraggingId}
-              onDragEnd={() => setDraggingId(null)}
-              onDrop={handleDrop}
-              onTaskClick={setSelectedTask}
-              onAddTask={setCreateStatus}
-            />
-          ))}
+  <KanbanColumn
+    key={f.id}
+    fieldId={f.id}
+    label={f.label}
+    color={f.color}
+    tasks={visibleTasks.filter(t => t.status === f.id)}
+    subjects={subjects}
+    draggingId={draggingId}
+    onDragStart={setDraggingId}
+    onDragEnd={() => setDraggingId(null)}
+    onDrop={handleDrop}
+    onTaskClick={setSelectedTask}
+    onAddTask={setCreateStatus}
+    onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))}
+  />
+))}
         </div>
       </div>
 
       {/* modals */}
+      {showAddSubject && (
+        <AddSubjectModal
+          onClose={() => setShowAddSubject(false)}
+          onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }}
+        />
+      )}
+      {showAddField && (
+        <AddFieldModal
+          onClose={() => setShowAddField(false)}
+          onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }}
+        />
+      )}
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
