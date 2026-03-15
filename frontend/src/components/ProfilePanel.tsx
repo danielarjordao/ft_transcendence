@@ -1,10 +1,9 @@
-
 import { useState, useEffect } from 'react';
 import type { User } from '../types/auth';
 import { AvatarUpload } from './AvatarUpload';
 import { useAuth } from '../contexts/AuthContext';
 
-// ── Theme — espelha exatamente o protótipo aprovado ──────────────────────────
+// ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
   bg: '#111111',
   surface: '#1A1A1A',
@@ -191,7 +190,6 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
   });
   return (
     <div>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBottom: 20, borderBottom: `1px solid ${T.border}` }}>
         <AvatarDisplay user={user} size={72} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -207,12 +205,10 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
           <IconEdit />Edit
         </button>
       </div>
-
       <SectionLabel>About</SectionLabel>
       <FieldRow label="Username" value={`@${user.username}`} />
       <FieldRow label="Email" value={user.email} locked />
       <FieldRow label="Bio" value={user.bio} />
-
       <SectionLabel>Account</SectionLabel>
       <FieldRow label="Member Since" value={joined} />
       <FieldRow label="Account Type" value={ACCOUNT_TYPE_LABEL[user.accountType] ?? user.accountType} />
@@ -280,18 +276,15 @@ function ProfileEdit({ user, onCancel, onSave }: {
           size="md"
         />
       </div>
-
       {saveError && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#2A1010', border: `1px solid #FF4D4D40`, borderRadius: 7, padding: '9px 12px', marginBottom: 16, color: T.danger, fontSize: 12 }}>
           <IconAlert />{saveError}
         </div>
       )}
-
       <Field label="Full Name" value={form.fullName} onChange={set('fullName')} error={errors.fullName} maxLength={80} />
       <Field label="Username" value={form.username} onChange={set('username')} error={errors.username} maxLength={30} />
       <Field label="Email" value={user.email} readOnly hint="Email cannot be changed here." />
       <Field label="Bio" value={form.bio} onChange={set('bio')} error={errors.bio} maxLength={280} multiline />
-
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
         <button
           onClick={onCancel}
@@ -362,7 +355,7 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
       <div
         onClick={handleClose}
         style={{
-          position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 40,
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 40,
           opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none',
           transition: 'opacity 0.3s',
         }}
@@ -370,7 +363,7 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
 
       {/* Panel */}
       <div style={{
-        position: 'absolute', top: 0, right: 0, bottom: 0, width: 480,
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: 480,
         background: T.surface, borderLeft: `1px solid ${T.borderLight}`,
         zIndex: 50, display: 'flex', flexDirection: 'column',
         transform: open ? 'translateX(0)' : 'translateX(100%)',
@@ -418,7 +411,6 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
                   user={user}
                   onCancel={() => setMode('view')}
                   onSave={async data => {
-                    // TODO: await api.patch('/users/me', data);
                     console.log('PATCH /api/users/me', data);
                     setMode('view');
                   }}

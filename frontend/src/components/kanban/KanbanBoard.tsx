@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Navbar from '../layout/Navbar';
+import { ProfilePanel } from '../ProfilePanel';
 import { useParams } from 'react-router-dom';
 import { KanbanColumn } from './KanbanColumn';
 import { Modal } from '../ui/Modal';
@@ -334,6 +336,7 @@ export default function KanbanBoard() {
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showAddField, setShowAddField]     = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [subjects, setSubjects] = useState<Subject[]>(MOCK_SUBJECTS);
   const [fields, setFields]     = useState(INITIAL_FIELDS);
 
@@ -354,116 +357,118 @@ export default function KanbanBoard() {
     setSelectedTask(updated);
   };
 
-  return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#111111' }}>
+    return (
+    <>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#111111', overflow: 'hidden' }}>
+        <Navbar onOpenProfile={() => setProfileOpen(true)} />
 
-      {/* workspace header */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div>
-          <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>{workspaceId ?? 'ft_transcendence'}</h1>
-          <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>42 School final project</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search tasks..."
-            style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '6px', padding: '7px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', width: '200px' }}
-          />
-          <Button variant="ghost" size="sm">Filter</Button>
-          <Button variant="ghost" size="sm">Members</Button>
-          <Button size="sm" onClick={() => setCreateStatus('todo')}>+ New Task</Button>
-        </div>
-      </div>
-
-      {/* subject tabs */}
-      <div style={{ padding: '0 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-        <button
-          onClick={() => setActiveSubject(null)}
-          style={{ padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`, color: activeSubject === null ? '#F5F5F5' : '#888888', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-          All
-        </button>
-
-        {subjects.map(s => (
-          <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
-            <button
-              onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)}
-              style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
-              {s.name}
-            </button>
-            <button
-              onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }}
-              style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>
-              ✕
-            </button>
+        {/* workspace header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>{workspaceId ?? 'ft_transcendence'}</h1>
+            <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>42 School final project</p>
           </div>
-        ))}
-
-        <button
-          onClick={() => setShowAddSubject(true)}
-          style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
-          + Add Subject
-        </button>
-        <button
-          onClick={() => setShowAddField(true)}
-          style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
-          + Add Field
-        </button>
-      </div>
-
-      {/* columns */}
-      <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
-        <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
-          {fields.map(f => (
-  <KanbanColumn
-    key={f.id}
-    fieldId={f.id}
-    label={f.label}
-    color={f.color}
-    tasks={visibleTasks.filter(t => t.status === f.id)}
-    subjects={subjects}
-    draggingId={draggingId}
-    onDragStart={setDraggingId}
-    onDragEnd={() => setDraggingId(null)}
-    onDrop={handleDrop}
-    onTaskClick={setSelectedTask}
-    onAddTask={setCreateStatus}
-    onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))}
-  />
-))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search tasks..."
+              style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '6px', padding: '7px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', width: '200px' }}
+            />
+            <Button variant="ghost" size="sm">Filter</Button>
+            <Button variant="ghost" size="sm">Members</Button>
+            <Button size="sm" onClick={() => setCreateStatus('todo')}>+ New Task</Button>
+          </div>
         </div>
-      </div>
 
-      {/* modals */}
-      {showAddSubject && (
-        <AddSubjectModal
-          onClose={() => setShowAddSubject(false)}
-          onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }}
-        />
-      )}
-      {showAddField && (
-        <AddFieldModal
-          onClose={() => setShowAddField(false)}
-          onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }}
-        />
-      )}
-      {selectedTask && (
-        <TaskDetailModal
-          task={selectedTask}
-          subjects={subjects}
-          onClose={() => setSelectedTask(null)}
-          onUpdate={handleUpdate}
-        />
-      )}
-      {createStatus && (
-        <CreateTaskModal
-          initialStatus={createStatus}
-          subjects={subjects}
-          onClose={() => setCreateStatus(null)}
-          onCreate={handleCreate}
-        />
-      )}
-    </div>
+        {/* subject tabs */}
+        <div style={{ padding: '0 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          <button
+            onClick={() => setActiveSubject(null)}
+            style={{ padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`, color: activeSubject === null ? '#F5F5F5' : '#888888', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+            All
+          </button>
+          {subjects.map(s => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
+              <button
+                onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)}
+                style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
+                {s.name}
+              </button>
+              <button
+                onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }}
+                style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => setShowAddSubject(true)}
+            style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
+            + Add Subject
+          </button>
+          <button
+            onClick={() => setShowAddField(true)}
+            style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
+            + Add Field
+          </button>
+        </div>
+
+        {/* columns */}
+        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
+          <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
+            {fields.map(f => (
+              <KanbanColumn
+                key={f.id}
+                fieldId={f.id}
+                label={f.label}
+                color={f.color}
+                tasks={visibleTasks.filter(t => t.status === f.id)}
+                subjects={subjects}
+                draggingId={draggingId}
+                onDragStart={setDraggingId}
+                onDragEnd={() => setDraggingId(null)}
+                onDrop={handleDrop}
+                onTaskClick={setSelectedTask}
+                onAddTask={setCreateStatus}
+                onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* modals */}
+        {showAddSubject && (
+          <AddSubjectModal
+            onClose={() => setShowAddSubject(false)}
+            onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }}
+          />
+        )}
+        {showAddField && (
+          <AddFieldModal
+            onClose={() => setShowAddField(false)}
+            onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }}
+          />
+        )}
+        {selectedTask && (
+          <TaskDetailModal
+            task={selectedTask}
+            subjects={subjects}
+            onClose={() => setSelectedTask(null)}
+            onUpdate={handleUpdate}
+          />
+        )}
+        {createStatus && (
+          <CreateTaskModal
+            initialStatus={createStatus}
+            subjects={subjects}
+            onClose={() => setCreateStatus(null)}
+            onCreate={handleCreate}
+          />
+        )}
+      </div>
+      <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+    </>
   );
 }
