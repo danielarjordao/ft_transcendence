@@ -81,16 +81,61 @@ For simple GET routes, the browser is the easiest tool.
 * **Action:** Open `http://localhost:3000/api/workspaces` in Chrome/Firefox.
 * **Expected Result:** A raw JSON response containing our mock data (e.g., the paginated workspace list).
 
-### Testing POST Requests & Validation (Create Data)
+### 8.1. API Testing Cheat Sheet: Using `curl`
 
-To test POST requests and see the global `ValidationPipe` in action, we can use the terminal with `curl` (or an API client like Insomnia). Keep the server running in one terminal tab, and use another tab to run these commands:
+While the browser is fine for simple `GET` requests, testing a REST API properly requires sending specific HTTP methods (POST, PATCH, DELETE) and JSON payloads. The `curl` command-line tool is perfect for this, as it interacts directly with our controllers.
 
-* **Test A: Sending Invalid Data (Should fail)**
+**The Anatomy of a `curl` Request:**
 
-  ```bash
-  curl -X POST http://localhost:3000/api/workspaces \
-    -H "Content-Type: application/json" \
-    -d '{"description": "A workspace without a name"}'
+* `-X [METHOD]`: Specifies the HTTP verb (e.g., `-X POST`, `-X PATCH`, `-X DELETE`). If omitted, it defaults to `GET`.
+* `-H "Content-Type: application/json"`: The Header. It tells the NestJS backend that we are sending JSON data. Without this, the `ValidationPipe` might ignore or reject the payload.
+* `-d '{ "key": "value" }'`: The Data (payload) we are sending. Notice the single quotes around the entire JSON block, and double quotes for the keys and values inside.
+
+#### 1. GET (Read Data)
+
+Fetches a list or a specific item. Query parameters can be directly attached to the URL (wrap the URL in quotes if you use `?` or `&`).
+
+```bash
+curl "http://localhost:3000/api/workspaces/ws_1/tasks?limit=5"
+
+```
+
+#### 2. POST (Create Data)
+
+Used to trigger `@Post()` routes. Requires a JSON body that matches our `CreateDTO`.
+
+```bash
+curl -X POST http://localhost:3000/api/workspaces/ws_1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Setup Prisma",
+    "status": "todo",
+    "priority": "high"
+  }'
+
+```
+
+#### 3. PATCH (Update Data)
+
+Used to trigger `@Patch()` routes. Thanks to `PartialType` in our DTOs, we only need to send the exact fields we want to change.
+
+```bash
+curl -X PATCH http://localhost:3000/api/tasks/tsk_12345 \
+  -H "Content-Type: application/json" \
+  -d '{"status": "in_progress"}'
+
+```
+
+#### 4. DELETE (Remove Data)
+
+Used to trigger `@Delete()` routes. Usually doesn't need a body. If successful, our backend returns a `204 No Content`, meaning the terminal will just jump to the next line without printing any JSON.
+
+```bash
+curl -X DELETE http://localhost:3000/api/tasks/tsk_12345
+
+```
+
+**Terminal Pro-Tip:** If the JSON response comes back printed on a single line and your terminal prompt (e.g., `user@computer:$`) appears glued to the end of it, that is completely normal. It just means the raw API response didn't include a trailing "Enter" (newline) character.
 
 ## 9. NestJS CLI: Automatic Code Generation
 
@@ -132,14 +177,3 @@ Here is the structured content for your `learning_notes.md` in English. I’ve o
 
 * **The `import type` Requirement:** * When importing an interface into a Controller to type a return value (e.g., `: Task`), you must use `import type { Task } from ...`.
 * **Why?** Because of `isolatedModules` and `emitDecoratorMetadata` flags. It tells the compiler the import is purely for type-checking and shouldn't be treated as a JavaScript class at runtime.
-
-### Code Maintenance: The `// MOCK` Strategy
-
-* **Tagging for Refactoring:** Using a standardized `// MOCK:` comment in Services identifies temporary in-memory logic.
-* **The Roadmap:** This creates a "Search Map" for the future. When we integrate **Prisma**, we can simply search for the word `MOCK` and replace the array methods (`.find`, `.push`, `.filter`) with actual database queries (`prisma.task.findMany`, etc.).
-
-### API Testing Strategy
-
-* **GET Requests:** Use the browser for a quick visual check of the data.
-* **POST/PATCH/DELETE:** Use `curl` or an API Client (like Insomnia/Postman) to test logic that requires a Request Body or specific HTTP verbs.
-* **Validation Check:** Always try to send "bad data" (e.g., a task without a title) to ensure the `ValidationPipe` is correctly blocking invalid entries.
