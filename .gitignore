@@ -3,3 +3,6 @@
 /docs/subject.pdf
 
 dist/
+
+.agents/
+.codex/
