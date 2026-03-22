@@ -12,7 +12,8 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Installs dependencies and prepares the Prisma client
-RUN npm install
+# --legacy-peer-deps to ignore version check
+RUN npm install --legacy-peer-deps
 RUN npx prisma generate
 
 # Copies the rest of your source code into the container
