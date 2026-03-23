@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 
 interface NavbarProps {
   onOpenProfile?: () => void;
+  onOpenChat?: () => void;
 }
 
 const T = {
@@ -86,6 +87,7 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
 
         {/* Chat */}
         <button
+          onClick={onOpenChat}
           style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           onMouseEnter={e => (e.currentTarget.style.color = T.text)}
           onMouseLeave={e => (e.currentTarget.style.color = T.dim)}
