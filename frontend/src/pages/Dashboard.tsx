@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import Navbar from '../components/layout/Navbar';
 import { useNavigate } from 'react-router-dom';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,25 +40,6 @@ const IconPlus = () => (
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
   </svg>
 );
-const IconBell = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-  </svg>
-);
-const IconMessage = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-  </svg>
-);
-const IconSun = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="5"/>
-    <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-  </svg>
-);
 
 // ── Mock workspaces ───────────────────────────────────────────────────────────
 const mockWorkspaces = [
@@ -93,13 +75,13 @@ function WorkspaceCard({ ws, onToggleStar }: {
   ws: typeof mockWorkspaces[0];
   onToggleStar: (id: string) => void;
 }) {
-const navigate = useNavigate();
+  const navigate = useNavigate();
   const [hov, setHov] = useState(false);
   const [starHov, setStarHov] = useState(false);
 
   return (
     <div
-onClick={() => navigate(`/board/${ws.id}`)}
+      onClick={() => navigate(`/board/${ws.id}`)}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -109,12 +91,9 @@ onClick={() => navigate(`/board/${ws.id}`)}
         boxShadow: hov ? '0 4px 24px rgba(0,0,0,0.25)' : 'none',
       }}
     >
-      {/* Thumbnail */}
       <div style={{ height: 160, background: T.bg, position: 'relative', borderBottom: `1px solid ${T.border}` }}>
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: ws.accent, borderRadius: '12px 12px 0 0' }} />
         <MiniKanban accent={ws.accent} />
-
-        {/* Star button */}
         <button
           onMouseEnter={() => setStarHov(true)}
           onMouseLeave={() => setStarHov(false)}
@@ -133,7 +112,6 @@ onClick={() => navigate(`/board/${ws.id}`)}
         </button>
       </div>
 
-      {/* Footer */}
       <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: ws.accent + '22', border: `1px solid ${ws.accent}44`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: ws.accent, fontSize: 15, fontWeight: 800 }}>{ws.label}</span>
@@ -149,79 +127,6 @@ onClick={() => navigate(`/board/${ws.id}`)}
             </div>
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Navbar ────────────────────────────────────────────────────────────────────
-// TODO: Lucas — mover para src/components/layout/Navbar.tsx
-function Navbar({ onOpenProfile, onOpenChat }: { onOpenProfile: () => void; onOpenChat: () => void }) {
-  const { user } = useAuth();
-  const initials = (user?.fullName ?? 'AL')
-    .split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-  return (
-    <div style={{
-      height: 56, background: T.bg, borderBottom: `1px solid ${T.border}`,
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 28px', flexShrink: 0, zIndex: 30, position: 'relative',
-    }}>
-      {/* Left: logo + nav */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{ width: 32, height: 32, background: T.primary, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>fz</span>
-          </div>
-          <span style={{ color: T.bright, fontSize: 16, fontWeight: 800, letterSpacing: '-0.3px' }}>fazelo</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7, border: `1px solid ${T.border}`, background: T.elevated, color: T.bright, fontSize: 13, fontWeight: 500 }}>
-          <IconGrid /><span>Dashboard</span>
-        </div>
-      </div>
-
-      {/* Right: actions + avatar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {/* Theme toggle */}
-        <button style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${T.border}`, background: T.elevated, cursor: 'pointer', color: '#FFA500', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <IconSun />
-        </button>
-
-        {/* Chat */}
-        <button 
-          onClick={onOpenChat}
-          style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-          onMouseEnter={e => e.currentTarget.style.color = T.text}
-          onMouseLeave={e => e.currentTarget.style.color = T.dim}>
-          <IconMessage />
-          <span style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, background: T.bright, borderRadius: '50%', fontSize: 9, fontWeight: 700, color: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>4</span>
-        </button>
-
-        {/* Notifications */}
-        <button style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-          onMouseEnter={e => e.currentTarget.style.color = T.text}
-          onMouseLeave={e => e.currentTarget.style.color = T.dim}>
-          <IconBell />
-          <span style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, background: T.bright, borderRadius: '50%', fontSize: 9, fontWeight: 700, color: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>3</span>
-        </button>
-
-        <div style={{ width: 1, height: 20, background: T.border, margin: '0 4px' }} />
-
-        {/* Avatar */}
-        <button
-          onClick={onOpenProfile}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px 5px 5px', borderRadius: 8, border: `1px solid ${T.border}`, cursor: 'pointer', background: T.elevated }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = T.borderLight}
-          onMouseLeave={e => e.currentTarget.style.borderColor = T.border}
-        >
-          <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2A2A3A', border: `1px solid #3A3A4A`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-            {user?.avatarUrl
-              ? <img src={user.avatarUrl} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ color: '#CCCCDD', fontSize: 10, fontWeight: 700 }}>{initials}</span>
-            }
-          </div>
-          <span style={{ color: T.text, fontSize: 13, fontWeight: 500 }}>{user?.username ?? 'profile'}</span>
-        </button>
       </div>
     </div>
   );
@@ -244,21 +149,17 @@ export default function Dashboard() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: T.bg, fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
-      <Navbar onOpenProfile={() => setProfileOpen(true)} 
-        onOpenChat={() => setChatOpen(true)}
-        />
+      <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} />
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div style={{ height: '100%', overflowY: 'auto', padding: '32px 40px' }}>
 
-          {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
             <div>
               <h1 style={{ color: T.bright, fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Workspaces</h1>
               <p style={{ color: T.dim, fontSize: 13 }}>{filtered.length} workspace{filtered.length !== 1 ? 's' : ''}</p>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              {/* Search */}
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: T.dim, display: 'flex' }}>
                   <IconSearch />
@@ -272,14 +173,12 @@ export default function Dashboard() {
                   onBlur={e => e.target.style.borderColor = T.border}
                 />
               </div>
-              {/* New workspace button */}
               <button style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: 'none', background: T.primary, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 <IconPlus />New Workspace
               </button>
             </div>
           </div>
 
-          {/* Cards grid */}
           {filtered.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 20 }}>
               {filtered.map(ws => (

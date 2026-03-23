@@ -1,3 +1,4 @@
+// in add new task, add description field and add attachment option
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 
