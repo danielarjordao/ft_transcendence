@@ -46,7 +46,7 @@ const IconBell = () => (
   </svg>
 );
 
-export default function Navbar({ onOpenProfile }: NavbarProps) {
+export default function Navbar({ onOpenProfile, onOpenChat }: NavbarProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -59,7 +59,6 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 28px', flexShrink: 0, zIndex: 30, position: 'relative',
     }}>
-      {/* Left: logo + nav */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         <div
           style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}
@@ -78,14 +77,11 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
         </div>
       </div>
 
-      {/* Right: actions + avatar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {/* Theme toggle */}
         <button style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${T.border}`, background: T.elevated, cursor: 'pointer', color: '#FFA500', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <IconSun />
         </button>
 
-        {/* Chat */}
         <button
           onClick={onOpenChat}
           style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
@@ -96,7 +92,6 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
           <span style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, background: T.bright, borderRadius: '50%', fontSize: 9, fontWeight: 700, color: T.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>4</span>
         </button>
 
-        {/* Notifications */}
         <button
           style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           onMouseEnter={e => (e.currentTarget.style.color = T.text)}
@@ -108,7 +103,6 @@ export default function Navbar({ onOpenProfile }: NavbarProps) {
 
         <div style={{ width: 1, height: 20, background: T.border, margin: '0 4px' }} />
 
-        {/* Avatar */}
         <button
           onClick={onOpenProfile}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px 5px 5px', borderRadius: 8, border: `1px solid ${T.border}`, cursor: 'pointer', background: T.elevated, fontFamily: 'inherit' }}
