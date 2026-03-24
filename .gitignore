@@ -3,3 +3,5 @@
 /docs/subject.pdf
 
 dist/
+
+node_modules/
