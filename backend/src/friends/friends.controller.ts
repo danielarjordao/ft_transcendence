@@ -1,4 +1,11 @@
-import { Controller, Get, Delete, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Delete,
+  Param,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { FriendsService } from './friends.service';
 
 @Controller('friends')
@@ -7,11 +14,14 @@ export class FriendsController {
 
   @Get()
   listFriends() {
-    return this.friendsService.listFriends('usr_123'); // Hardcoded user por agora
+    // TODO: Extract actual userId from the JWT request object
+    return this.friendsService.listFriends('usr_123');
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT) // Required by API Contract
   removeFriend(@Param('id') id: string) {
+    // TODO: Extract actual userId from the JWT request object
     this.friendsService.removeFriend('usr_123', id);
   }
 }
