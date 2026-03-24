@@ -1,18 +1,17 @@
 # Uses a lightweight Node.js version
-FROM node:20-alpine
-
-# Installs OpenSSL required by Prisma
-RUN apk add --no-cache openssl
+FROM node:20-bookworm-slim
 
 # Sets the working directory inside the container
 WORKDIR /app
 
-# Copies ONLY the dependency files first (makes Docker build faster)
+# Copies dependency files first so npm install can be cached separately
 COPY package*.json ./
-COPY prisma ./prisma/
 
-# Installs dependencies and prepares the Prisma client
+# Installs dependencies before copying the rest of the project
 RUN npm install
+
+# Copies Prisma schema after dependencies so Prisma changes do not force reinstalling packages
+COPY prisma ./prisma/
 RUN npx prisma generate
 
 # Copies the rest of your source code into the container
