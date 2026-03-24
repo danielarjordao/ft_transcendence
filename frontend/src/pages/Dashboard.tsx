@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { useAuth } from '../contexts/AuthContext';
+import ChatPanel from '../components/chat/ChatPanel';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -155,7 +156,7 @@ onClick={() => navigate(`/board/${ws.id}`)}
 
 // ── Navbar ────────────────────────────────────────────────────────────────────
 // TODO: Lucas — mover para src/components/layout/Navbar.tsx
-function Navbar({ onOpenProfile }: { onOpenProfile: () => void }) {
+function Navbar({ onOpenProfile, onOpenChat }: { onOpenProfile: () => void; onOpenChat: () => void }) {
   const { user } = useAuth();
   const initials = (user?.fullName ?? 'AL')
     .split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
@@ -187,7 +188,9 @@ function Navbar({ onOpenProfile }: { onOpenProfile: () => void }) {
         </button>
 
         {/* Chat */}
-        <button style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
+        <button 
+          onClick={onOpenChat}
+          style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: T.dim, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
           onMouseEnter={e => e.currentTarget.style.color = T.text}
           onMouseLeave={e => e.currentTarget.style.color = T.dim}>
           <IconMessage />
@@ -226,7 +229,9 @@ function Navbar({ onOpenProfile }: { onOpenProfile: () => void }) {
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 export default function Dashboard() {
+  const { user } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [workspaces, setWorkspaces] = useState(mockWorkspaces);
   const [search, setSearch] = useState('');
 
@@ -239,7 +244,9 @@ export default function Dashboard() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: T.bg, fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
-      <Navbar onOpenProfile={() => setProfileOpen(true)} />
+      <Navbar onOpenProfile={() => setProfileOpen(true)} 
+        onOpenChat={() => setChatOpen(true)}
+        />
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div style={{ height: '100%', overflowY: 'auto', padding: '32px 40px' }}>
@@ -288,6 +295,12 @@ export default function Dashboard() {
         </div>
 
         <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+
+        <ChatPanel
+          isOpen={chatOpen}
+          onClose={() => setChatOpen(false)}
+          currentUserId={user?.id || '1'}
+        />
       </div>
     </div>
   );
