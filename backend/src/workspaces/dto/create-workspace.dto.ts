@@ -6,8 +6,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CreateSubjectDto } from './subject.dto';
-import { CreateFieldDto } from './field.dto';
+import { CreateSubjectDto } from '../../subjects/dto/create-subject.dto';
+import { CreateFieldDto } from '../../fields/dto/create-field.dto';
 
 export class CreateWorkspaceDto {
   @IsString({ message: 'The workspace name must be a string.' })

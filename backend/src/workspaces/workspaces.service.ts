@@ -5,8 +5,9 @@ import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
 
 @Injectable()
 export class WorkspacesService {
-  create(dto: CreateWorkspaceDto) {
-    // TODO: replace with Prisma workspace create (include subjects and fields in the same transaction)
+  create(userId: string, dto: CreateWorkspaceDto) {
+    // TODO: Replace with Prisma - Create workspace, assign caller as 'owner' in WorkspaceMember.
+    // TODO: If dto.subjects or dto.fields are provided, create them in the same Prisma transaction.
     return {
       id: `ws_${Date.now()}`,
       ...dto,
@@ -14,8 +15,8 @@ export class WorkspacesService {
     };
   }
 
-  findAll(query: ListWorkspacesQueryDto) {
-    // TODO: replace with Prisma query — filter by caller's workspace memberships + optional search term
+  findAll(userId: string, query: ListWorkspacesQueryDto) {
+    // TODO: Replace with Prisma - Find workspaces where the user is a member. Apply limit, offset, and search.
     const { limit = 20, offset = 0 } = query;
     return {
       items: [
@@ -27,30 +28,25 @@ export class WorkspacesService {
           fields: [],
         },
       ],
-      pageInfo: {
-        limit,
-        offset,
-        total: 1,
-        hasMore: false,
-      },
+      pageInfo: { limit, offset, total: 1, hasMore: false },
     };
   }
 
-  findOne(wsId: string) {
-    // TODO: replace with Prisma findUnique — verify caller is a workspace member (throw 403 if not)
+  findOne(userId: string, wsId: string) {
+    // TODO: Replace with Prisma - Find workspace by ID. Throw 403 if user is not a member.
     return {
       id: wsId,
       name: 'Fazelo Core',
       description: 'Main product workspace.',
       subjects: [],
       fields: [],
-      memberCount: 0,
+      memberCount: 1,
       createdAt: new Date().toISOString(),
     };
   }
 
-  update(wsId: string, dto: UpdateWorkspaceDto) {
-    // TODO: replace with Prisma update — verify caller has admin role in this workspace (throw 403 if not)
+  update(userId: string, wsId: string, dto: UpdateWorkspaceDto) {
+    // TODO: Replace with Prisma - Verify if user is admin/owner. Update workspace data.
     return {
       id: wsId,
       ...dto,
@@ -58,27 +54,15 @@ export class WorkspacesService {
     };
   }
 
-  remove(_wsId: string) {
-    // TODO: replace with Prisma delete — verify caller is the workspace owner (throw 403 if not)
+  remove(userId: string, wsId: string) {
+    // TODO: Replace with Prisma - Verify if user is owner. Delete workspace and cascade relations.
+    // TODO: Remove console.log and perform actual deletion in DB.
+    console.log(`User ${userId} requested deletion of workspace ${wsId}`);
     return;
   }
 
-  // TODO (API 3.6): listMembers(wsId: string)
-  // Inject UsersService and join WorkspaceMember with User to return enriched member list
-
-  // TODO (API 3.7): inviteMember(wsId: string, dto: { email: string; role: string })
-  // Call UsersService.findByEmail() — if user not found throw 404; if already member throw 409
-  // Then create WorkspaceInvitation record and emit WS event 'workspace_invitation_received'
-
-  // TODO (API 3.8): listMyInvitations() — standalone route on WorkspaceInvitationsController
-  // Needs current user ID from JWT (AuthGuard); filter invitations by inviteeId
-
-  // TODO (API 3.9): respondToInvitation(invitationId: string, action: 'accept' | 'decline')
-  // Needs AuthGuard; on 'accept' create WorkspaceMember record; emit WS event 'member_joined'
-
-  // TODO (API 3.10): updateMemberRole(wsId: string, memberId: string, dto: { role: string })
-  // Verify caller is admin; emit WS event 'member_role_updated' to workspace:{wsId}
-
-  // TODO (API 3.11): removeMember(wsId: string, memberId: string)
-  // Verify caller is admin; emit WS event 'member_removed' to workspace:{wsId}
+  // TODO: listMembers(wsId: string) - Join WorkspaceMember with User table.
+  // TODO: inviteMember(wsId: string, email: string, role: string) - Check if user exists, create invitation, emit WS event.
+  // TODO: updateMemberRole(wsId: string, memberId: string, role: string) - Admin only, emit WS event.
+  // TODO: removeMember(wsId: string, memberId: string) - Admin only, emit WS event.
 }
