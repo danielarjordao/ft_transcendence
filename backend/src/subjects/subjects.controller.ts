@@ -6,20 +6,22 @@ import {
   Param,
   Delete,
   Patch,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 
-@Controller('workspaces/:workspaceId/subjects')
+@Controller() // Removed global prefix to match precise API contract routes
 export class SubjectsController {
   constructor(private readonly subjectsService: SubjectsService) {}
 
-  @Get()
+  @Get('workspaces/:workspaceId/subjects')
   findAll(@Param('workspaceId') workspaceId: string) {
     return this.subjectsService.findAll(workspaceId);
   }
 
-  @Post()
+  @Post('workspaces/:workspaceId/subjects')
   create(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: CreateSubjectDto,
@@ -27,17 +29,17 @@ export class SubjectsController {
     return this.subjectsService.create(workspaceId, dto);
   }
 
-  @Patch(':id')
+  @Patch('subjects/:subjectId')
   update(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
-    @Body() updateData: Partial<CreateSubjectDto>, // Removemos o any daqui também
+    @Param('subjectId') subjectId: string,
+    @Body() updateData: Partial<CreateSubjectDto>,
   ) {
-    return this.subjectsService.update(workspaceId, id, updateData);
+    return this.subjectsService.update(subjectId, updateData);
   }
 
-  @Delete(':id')
-  remove(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
-    return this.subjectsService.remove(workspaceId, id);
+  @Delete('subjects/:subjectId')
+  @HttpCode(HttpStatus.NO_CONTENT) // Required by API Contract
+  remove(@Param('subjectId') subjectId: string) {
+    this.subjectsService.remove(subjectId);
   }
 }
