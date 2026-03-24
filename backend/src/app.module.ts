@@ -5,9 +5,10 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
 import { FriendsModule } from './friends/friends.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
-  imports: [WorkspacesModule, TasksModule, UsersModule, FriendsModule],
+  imports: [WorkspacesModule, TasksModule, UsersModule, FriendsModule, AccountModule],
   controllers: [AppController],
   providers: [AppService],
 })
