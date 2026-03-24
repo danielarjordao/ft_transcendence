@@ -7,12 +7,16 @@ export class AccountService {
     if (dto.currentPassword === dto.newPassword) {
       throw new BadRequestException('New password must be different');
     }
-    // Simulate password change logic (e.g., check current password, hash new password, save to DB)
+    // TODO: Use Prisma to fetch user, verify currentPassword hash with Bcrypt.
+    // TODO: Hash the newPassword with Bcrypt and update the database record.
   }
 
   setup2fa(userId: string) {
-    // Mock: return the same secret and QR code for any user
     console.log(`Setting up 2FA for user ${userId}`);
+    // TODO: Generate a real secret using a library like 'speakeasy'.
+    // TODO: Generate a real QR code data URL using the 'qrcode' library.
+    // TODO: Temporarily save the secret in the DB (unverified state) using Prisma.
+
     return {
       secret: 'JBSWY3DPEHPK3PXP',
       otpauthUrl:
@@ -23,13 +27,20 @@ export class AccountService {
   }
 
   verify2fa(userId: string, dto: Verify2FaDto) {
+    // TODO: Use Prisma to fetch the pending 2FA secret for this user.
+    // TODO: Use 'speakeasy' to validate the provided dto.code against the secret.
+    // TODO: If valid, mark 2FA as active in the DB.
+
     if (dto.code !== '123456') {
-      // Mock: only accept '123456' as the valid 2FA code for testing purposes
       throw new BadRequestException('Invalid 2FA code');
     }
   }
 
   disable2fa(userId: string, dto: Verify2FaDto) {
+    // TODO: Use Prisma to fetch the active 2FA secret for this user.
+    // TODO: Use 'speakeasy' to validate the provided dto.code.
+    // TODO: If valid, remove the 2FA secret from the DB and set 2FA as inactive.
+
     if (dto.code !== '123456') {
       throw new BadRequestException('Invalid 2FA code');
     }
