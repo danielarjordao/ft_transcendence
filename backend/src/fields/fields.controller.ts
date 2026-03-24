@@ -6,20 +6,23 @@ import {
   Patch,
   Param,
   Delete,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { FieldsService } from './fields.service';
 import { CreateFieldDto } from './dto/create-field.dto';
 
-@Controller('workspaces/:workspaceId/fields')
+// No global prefix so it is expected that all routes are defined with their full path as per the API contract (e.g., /workspaces/:workspaceId/fields)
+@Controller()
 export class FieldsController {
   constructor(private readonly fieldsService: FieldsService) {}
 
-  @Get()
+  @Get('workspaces/:workspaceId/fields')
   findAll(@Param('workspaceId') workspaceId: string) {
     return this.fieldsService.findAll(workspaceId);
   }
 
-  @Post()
+  @Post('workspaces/:workspaceId/fields')
   create(
     @Param('workspaceId') workspaceId: string,
     @Body() dto: CreateFieldDto,
@@ -27,17 +30,18 @@ export class FieldsController {
     return this.fieldsService.create(workspaceId, dto);
   }
 
-  @Patch(':id')
+  @Patch('fields/:fieldId')
   update(
-    @Param('workspaceId') workspaceId: string,
-    @Param('id') id: string,
+    @Param('fieldId') fieldId: string,
     @Body() updateData: Partial<CreateFieldDto>,
   ) {
-    return this.fieldsService.update(workspaceId, id, updateData);
+    return this.fieldsService.update(fieldId, updateData);
   }
 
-  @Delete(':id')
-  remove(@Param('workspaceId') workspaceId: string, @Param('id') id: string) {
-    return this.fieldsService.remove(workspaceId, id);
+  @Delete('fields/:fieldId')
+  // Required by API Contract
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('fieldId') fieldId: string) {
+    this.fieldsService.remove(fieldId);
   }
 }

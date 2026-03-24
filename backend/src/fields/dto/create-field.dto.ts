@@ -1,9 +1,9 @@
-import { IsString, IsEnum } from 'class-validator';
+import { IsString, IsHexColor } from 'class-validator';
 
 export class CreateFieldDto {
   @IsString()
   name: string;
 
-  @IsEnum(['text', 'number', 'select', 'date', 'checkbox'])
-  type: string;
+  @IsHexColor()
+  color: string;
 }
