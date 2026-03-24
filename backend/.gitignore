@@ -2,5 +2,10 @@ node_modules
 # Keep environment variables out of version control
 .env
 
-/generated/prisma
+/src/generated/prisma
 dist/
+
+/src/generated/prisma
+
+/prisma/prisma.md
+backend-setup.md

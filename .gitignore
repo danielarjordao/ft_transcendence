@@ -6,3 +6,6 @@ dist/
 
 .agents/
 .codex/
+.devcontainer/
+docker-compose-explicacao.md
+
