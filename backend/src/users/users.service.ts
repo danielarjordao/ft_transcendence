@@ -124,6 +124,8 @@ export class UsersService {
     }));
   }
 
+  /*
+  // TODO: Implement file upload logic with proper validation and storage
   uploadAvatar(userId: string, file: Express.Multer.File) {
     console.log(`Received file for user ${userId}:`, file?.originalname);
     // TODO: Validate file size (max 5MB) and type (JPG, PNG, GIF). Throw 413 or 415 if invalid.
@@ -135,4 +137,5 @@ export class UsersService {
       avatarUrl: `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.png`,
     };
   }
+  */
 }
