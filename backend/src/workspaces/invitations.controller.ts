@@ -9,7 +9,7 @@ export class InvitationsController {
   // GET /workspace-invitations — List My Invitations (API 3.8)
   @Get()
   findAll() {
-    return this.invitationsService.findAll();
+    return this.invitationsService.findAll('usr_123');
   }
 
   // PATCH /workspace-invitations/:invitationId — Respond to Invitation (API 3.9)
@@ -18,6 +18,6 @@ export class InvitationsController {
     @Param('invitationId') invitationId: string,
     @Body() updateDto: UpdateWorkspaceInvitationDto,
   ) {
-    return this.invitationsService.update(invitationId, updateDto);
+    return this.invitationsService.update('usr_123', invitationId, updateDto);
   }
 }

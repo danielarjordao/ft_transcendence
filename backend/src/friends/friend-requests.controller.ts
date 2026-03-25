@@ -11,11 +11,14 @@ export class FriendRequestsController {
 
   @Get()
   listRequests() {
+    // TODO: Extract actual userId from the JWT request object
     return this.friendsService.listRequests('usr_123');
   }
 
   @Post()
+  // NestJS defaults to 201 Created, which matches the API Contract
   sendRequest(@Body() dto: CreateFriendRequestDto) {
+    // TODO: Extract actual userId from the JWT request object
     return this.friendsService.sendRequest('usr_123', dto);
   }
 
@@ -24,6 +27,7 @@ export class FriendRequestsController {
     @Param('id') id: string,
     @Body() dto: RespondFriendRequestDto,
   ) {
+    // TODO: Extract actual userId from the JWT request object
     return this.friendsService.respondRequest('usr_123', id, dto);
   }
 }

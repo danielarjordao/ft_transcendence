@@ -24,7 +24,8 @@ export class CommentsService {
 
   create(taskId: string, dto: CreateCommentDto) {
     this.tasksService.findOne(taskId);
-    // TODO: Replace with Prisma create — verify caller is workspace member; emit WS event `comment_added` para workspace:{wsId}
+    // TODO: Replace with Prisma create — verify caller is workspace member.
+    // TODO: Emit WS event 'comment_added' to 'workspace:{wsId}'.
     const comment: MockComment = {
       id: `c_${Date.now()}`,
       taskId,
@@ -36,7 +37,8 @@ export class CommentsService {
   }
 
   update(commentId: string, dto: UpdateCommentDto) {
-    // TODO: Replace with Prisma update — verify caller is workspace member; emit WS event `comment_updated`
+    // TODO: Replace with Prisma update — verify caller is the comment author (or admin).
+    // TODO: Emit WS event 'comment_updated' to 'workspace:{wsId}'.
     const comment = this.comments.find((c) => c.id === commentId);
     if (!comment) throw new NotFoundException(`Comment ${commentId} not found`);
     comment.text = dto.text;
@@ -44,7 +46,8 @@ export class CommentsService {
   }
 
   remove(commentId: string) {
-    // TODO: Replace with Prisma delete — verify caller is workspace member; emit WS event `comment_deleted`
+    // TODO: Replace with Prisma delete — verify caller is the comment author (or admin).
+    // TODO: Emit WS event 'comment_deleted' to 'workspace:{wsId}'.
     const index = this.comments.findIndex((c) => c.id === commentId);
     if (index === -1)
       throw new NotFoundException(`Comment ${commentId} not found`);

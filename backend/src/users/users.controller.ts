@@ -18,44 +18,43 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // Static and Search Routes first
   @Get()
   searchUsers(@Query('search') search: string, @Query('limit') limit?: string) {
     return this.usersService.search(search, limit ? parseInt(limit, 10) : 10);
   }
 
+  // Exact match 'me' routes
   @Get('me')
   getMe() {
-    // Hardcoded to 'usr_123' since there's no real authentication yet. In a real implementation, extract user ID from auth token.
+    // TODO: Extract actual userId from the JWT request object
     return this.usersService.getMe('usr_123');
   }
 
   @Patch('me')
   updateProfile(@Body() updateProfileDto: UpdateProfileDto) {
+    // TODO: Extract actual userId from the JWT request object
     return this.usersService.updateProfile('usr_123', updateProfileDto);
   }
 
   @Patch('me/preferences')
   updatePreferences(@Body() updatePreferencesDto: UpdatePreferencesDto) {
+    // TODO: Extract actual userId from the JWT request object
     return this.usersService.updatePreferences('usr_123', updatePreferencesDto);
   }
 
-  @Get(':id')
-  getPublicProfile(@Param('id') id: string) {
-    // Avoid conflicting with 'me' route
-    if (id === 'me') return;
-    return this.usersService.getPublicProfile(id);
-  }
-
+  // File upload routes
   @Post('avatar')
   @UseInterceptors(FileInterceptor('file'))
-  // Change any to a proper DTO when implementing file upload handling
-  uploadAvatar(@UploadedFile() file: any) {
-    // TODO: Replace with Prisma - Store file securely (e.g., AWS S3), update user's avatarUrl in database, and return the new URL
-    console.log('Received file:', file);
+  uploadAvatar(@UploadedFile() file: Express.Multer.File) {
+    // Typed as Multer file instead of any
+    // TODO: Extract actual userId from the JWT request object
+    return this.usersService.uploadAvatar('usr_123', file);
+  }
 
-    // Simulate storing the file and updating the user's avatar URL
-    return {
-      avatarUrl: `https://cdn.fazelo.com/avatars/usr_123_${Date.now()}.png`,
-    };
+  // 4. Dynamic/Parameter routes MUST be last
+  @Get(':id')
+  getPublicProfile(@Param('id') id: string) {
+    return this.usersService.getPublicProfile(id);
   }
 }
