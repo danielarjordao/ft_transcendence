@@ -46,7 +46,7 @@ export class UsersController {
   // File upload routes
   @Post('avatar')
   @UseInterceptors(FileInterceptor('file'))
-  uploadAvatar(@UploadedFile() file: any) {
+  uploadAvatar(@UploadedFile() file: Express.Multer.File) {
     // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
     // TODO: Add strict validation for file type (JPG/PNG) and size (5MB) using a Pipe
     return this.usersService.uploadAvatar('usr_123', file);
