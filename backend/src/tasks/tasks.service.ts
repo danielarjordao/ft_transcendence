@@ -44,10 +44,21 @@ export class TasksService {
   }
 
   findOne(taskId: string) {
-    // TODO: Replace with Prisma findUnique — verify caller is workspace member (throw 403 if not).
-    const task = this.tasks.find((t) => t.id === taskId);
-    if (!task) throw new NotFoundException(`Task with ID ${taskId} not found`);
-    return task;
+    // TODO: Replace with Prisma - Find task by ID. Throw 404 if not found.
+    if (taskId === 'tsk_1') {
+      return {
+        id: 'tsk_1',
+        workspaceId: 'ws_1',
+        title: 'Setup NestJS project',
+        description: 'Initialize NestJS with TypeScript config.',
+        priority: 'high',
+        status: 'todo',
+        dueDate: '2025-03-10',
+        assigneeId: 'usr_789',
+      };
+    }
+
+    throw new NotFoundException(`Task with ID ${taskId} not found`);
   }
 
   update(taskId: string, updateTaskDto: UpdateTaskDto) {
