@@ -1,7 +1,11 @@
+import { IsString, IsNotEmpty } from 'class-validator';
+
 export class SendMessageDto {
-  content: string;
-  // To direct message
-  receiverId?: string;
-  // To channel message
-  channelId?: string;
+  @IsString()
+  @IsNotEmpty()
+  toUserId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  text: string;
 }
