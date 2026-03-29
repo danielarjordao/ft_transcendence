@@ -7,6 +7,7 @@ import {
   Query,
   Post,
   UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
@@ -45,12 +46,11 @@ export class UsersController {
   // File upload routes
   @Post('avatar')
   @UseInterceptors(FileInterceptor('file'))
-  // TODO: Add validation for file type and size using Multer options
-  // uploadAvatar(@UploadedFile() file: Express.Multer.File) {
-  // Typed as Multer file instead of any
-  // TODO: Extract actual userId from the JWT request object
-  //  return this.usersService.uploadAvatar('usr_123', file);
-  //}
+  uploadAvatar(@UploadedFile() file: any) {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
+    // TODO: Add strict validation for file type (JPG/PNG) and size (5MB) using a Pipe
+    return this.usersService.uploadAvatar('usr_123', file);
+  }
 
   // 4. Dynamic/Parameter routes MUST be last
   @Get(':id')
