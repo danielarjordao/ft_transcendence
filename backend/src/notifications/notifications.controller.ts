@@ -1,34 +1,50 @@
-import { Controller, Get, Patch, Delete, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 
-@Controller('/notifications')
+@Controller()
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  // TODO: Replace 'usr_123' with actual authenticated user ID using @GetUser() decorator in all routes
-
-  @Get()
+  @Get('notifications')
   findAll() {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
     return this.notificationsService.findAll('usr_123');
   }
 
-  @Get('unread-count')
+  @Get('notifications/unread-count')
   getUnreadCount() {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
     return this.notificationsService.getUnreadCount('usr_123');
   }
 
-  @Patch('read-all')
+  @Patch('notifications/read-all')
   markAllAsRead() {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
     return this.notificationsService.markAllAsRead('usr_123');
   }
 
-  @Patch(':notificationId')
-  markAsRead(@Param('notificationId') notificationId: string) {
-    return this.notificationsService.markAsRead('usr_123', notificationId);
+  @Patch('notifications/:id')
+  update(@Param('id') id: string, @Body('read') read: boolean) {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
+    // TODO: Pass the userId to the service to ensure ownership validation
+    return this.notificationsService.update(id, read);
   }
 
-  @Delete(':notificationId')
-  remove(@Param('notificationId') notificationId: string) {
-    return this.notificationsService.remove('usr_123', notificationId);
+  // Added to match API Contract Section 6.8 (204 No Content instead of 200 OK)
+  @Delete('notifications/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id') id: string) {
+    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
+    // TODO: Pass the userId to the service to ensure ownership validation
+    this.notificationsService.remove(id);
   }
 }
