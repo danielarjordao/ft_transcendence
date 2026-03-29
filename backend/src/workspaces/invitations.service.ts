@@ -16,11 +16,17 @@ export class InvitationsService {
     updateDto: UpdateWorkspaceInvitationDto,
   ) {
     // TODO: Replace with Prisma - Find invitation. Verify it belongs to userId.
-    // TODO: If 'accept', create WorkspaceMember record and emit WS 'member_joined'.
-    // TODO: Update invitation status to 'accepted' or 'declined'.
+    // TODO: If 'accept', create WorkspaceMember record and emit WS 'member_joined' to 'workspace:{wsId}'.
+    // TODO: Update invitation status in DB.
+
     return {
       id: invitationId,
-      actionTaken: updateDto.action,
+      workspaceId: 'ws_1',
+      inviterId: 'usr_456',
+      inviteeEmail: 'novo@42.fr',
+      role: 'member',
+      status: updateDto.action === 'accept' ? 'accepted' : 'declined',
+      createdAt: new Date().toISOString(),
     };
   }
 }
