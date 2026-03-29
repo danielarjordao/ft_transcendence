@@ -7,7 +7,10 @@ import {
   Param,
   Post,
   Query,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { AttachmentsService } from './attachments.service';
 import { ListAttachmentsQueryDto } from './dto/list-attachments-query.dto';
 
@@ -24,9 +27,12 @@ export class AttachmentsController {
   }
 
   @Post('tasks/:taskId/attachments')
-  // TODO: Add @UseInterceptors(FilesInterceptor('files')) and @UploadedFiles() to handle multipart/form-data
-  upload(@Param('taskId') taskId: string) {
-    return this.attachmentsService.upload(taskId);
+  @UseInterceptors(FilesInterceptor('files'))
+  upload(
+    @Param('taskId') taskId: string,
+    @UploadedFiles() files: Express.Multer.File[], // <-- Alterar aqui
+  ) {
+    return this.attachmentsService.upload(taskId, files);
   }
 
   @Get('attachments/:attachmentId')

@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 
-type MockAttachment = { id: string; taskId: string; url: string };
+type MockAttachment = {
+  id: string;
+  taskId: string;
+  name: string;
+  size: number;
+  type: string;
+  url: string;
+  createdAt: Date;
+};
 
 @Injectable()
 export class AttachmentsService {
@@ -15,18 +23,23 @@ export class AttachmentsService {
     return this.attachments.filter((a) => a.taskId === taskId);
   }
 
-  upload(taskId: string) {
+  upload(taskId: string, files: Express.Multer.File[]) {
     this.tasksService.findOne(taskId);
-    // TODO: Implement file upload handling and storage (e.g., AWS S3 or local).
-    // TODO: Replace with Prisma create — verify caller is workspace member.
-    // TODO: Emit WS event 'attachment_uploaded' to 'workspace:{wsId}'.
-    const attachment: MockAttachment = {
-      id: `att_${Date.now()}`,
-      taskId,
-      url: 'https://mock-url.com/file.pdf',
-    };
-    this.attachments.push(attachment);
-    return [attachment];
+
+    const newAttachments: MockAttachment[] = (files || []).map(
+      (file, index) => ({
+        id: `att_${Date.now()}_${index}`,
+        taskId,
+        name: file.originalname,
+        size: file.size,
+        type: file.mimetype,
+        url: `https://mock-url.com/${file.originalname}`,
+        createdAt: new Date(),
+      }),
+    );
+
+    this.attachments.push(...newAttachments);
+    return newAttachments;
   }
 
   getById(attachmentId: string) {
