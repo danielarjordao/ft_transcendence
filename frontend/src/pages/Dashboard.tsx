@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ChatPanel from '../components/chat/ChatPanel';
 import { useWorkspaceStore } from '../store/workspace.store';
 import type { Workspace } from '../store/workspace.store';
+import { totalUnread } from '../constants/chat';
 
 const T = {
   bg: '#111111',
@@ -318,7 +319,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: T.bg, fontFamily: 'system-ui, -apple-system, sans-serif', overflow: 'hidden' }}>
-      <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} />
+      <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={totalUnread} />
 
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <div style={{ height: '100%', overflowY: 'auto', padding: '32px 40px' }}>

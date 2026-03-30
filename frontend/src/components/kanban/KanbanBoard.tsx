@@ -11,6 +11,7 @@ import type { Task, Subject } from './TaskCard';
 import { useWorkspaceStore } from '../../store/workspace.store';
 import ChatPanel from '../chat/ChatPanel';
 import { useAuth } from '../../contexts/AuthContext';
+import { totalUnread } from '../../constants/chat';
 
 const PRESET_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
@@ -301,15 +302,17 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
 
 // ── task detail modal ────────────────────────────────────────────────────────
 
-function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
+function TaskDetailModal({ task, subjects, onClose, onUpdate, onDelete }: {
   task: Task;
   subjects: Subject[];
   onClose: () => void;
   onUpdate: (t: Task) => void;
+  onDelete: (id: string) => void;
 }) {
   const [comment, setComment]             = useState('');
   const [detailFiles, setDetailFiles]     = useState<AttachedFile[]>([]);
   const [isEditing, setIsEditing]         = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [draftTitle, setDraftTitle]       = useState(task.title);
   const [draftDescription, setDraftDesc] = useState(task.description ?? '');
   const [draftAssignee, setDraftAssignee] = useState(task.assignee ?? '');
@@ -379,17 +382,46 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           <span style={{ color: '#888888', fontSize: '12px' }}>{subject?.name}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {!isEditing && (
-            <button
-              onClick={handleEdit}
-              style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #3A3A3A', background: 'transparent', color: '#888888', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#7B68EE'; e.currentTarget.style.color = '#7B68EE'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#888888'; }}
-            >
-              Edit
-            </button>
+          {!isEditing && !confirmDelete && (
+            <>
+              <button
+                onClick={handleEdit}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #3A3A3A', background: 'transparent', color: '#888888', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#7B68EE'; e.currentTarget.style.color = '#7B68EE'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#888888'; }}
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #3A3A3A', background: 'transparent', color: '#888888', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#888888'; }}
+              >
+                Delete
+              </button>
+            </>
           )}
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          {confirmDelete && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#888888', fontSize: '12px' }}>Delete this task?</span>
+              <button
+                onClick={() => { onDelete(task.id); onClose(); }}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: '#FF6B6B', color: '#fff', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}
+              >
+                Confirm
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #3A3A3A', background: 'transparent', color: '#888888', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          {!confirmDelete && (
+            <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+          )}
         </div>
       </div>
 
@@ -753,12 +785,13 @@ export default function KanbanBoard() {
   const handleDrop   = (newStatus: string) => { if (!draggingId) return; setTasks(prev => prev.map(t => t.id === draggingId ? { ...t, status: newStatus } : t)); setDraggingId(null); };
   const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
   const handleUpdate = (updated: Task) => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setSelectedTask(updated); };
+  const handleDelete = (id: string) => { setTasks(prev => prev.filter(t => t.id !== id)); setSelectedTask(null); };
   const removeFilter = (key: keyof Filters, val: string) => setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
 
   return (
     <>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#111111', overflow: 'hidden' }}>
-        <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} />
+        <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={totalUnread} />
 
         {/* workspace header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -891,7 +924,7 @@ export default function KanbanBoard() {
 
         {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />}
         {showAddField   && <AddFieldModal   onClose={() => setShowAddField(false)}   onCreate={field   => { setFields(prev => [...prev, field]);     setShowAddField(false);   }} />}
-        {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} />}
+        {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} onDelete={handleDelete} />}
         {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
       </div>
 

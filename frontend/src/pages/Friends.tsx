@@ -72,7 +72,7 @@ export default function Friends() {
   const [addSuccess, setAddSuccess]     = useState('');
   const [profileOpen, setProfileOpen]   = useState(false);
   const [chatOpen, setChatOpen]         = useState(false);
-  const [chatFriendId, setChatFriendId] = useState<string | null>(null);
+  const [_chatFriendId, setChatFriendId] = useState<string | null>(null);
 
   const onlineCount  = friends.filter(f => f.online).length;
   const pendingCount = received.length;

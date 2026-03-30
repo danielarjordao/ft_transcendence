@@ -1,11 +1,10 @@
-import { useEffect } from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import ConversationList from './ConversationList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useChat } from '../../hooks/useChat';
-import type { Conversation } from '../../types/chat';
+import { MOCK_CONVERSATIONS } from '../../constants/chat';
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -13,63 +12,20 @@ interface ChatPanelProps {
   currentUserId: string;
 }
 
-const MOCK_CONVERSATIONS: Conversation[] = [
-  {
-    id: '1',
-    friendId: '2',
-    friendName: 'Sarah Chen',
-    friendAvatar: undefined,
-    isOnline: true,
-    lastMessage: 'Sounds good! I will update the board...',
-    lastMessageTime: '2m ago',
-    unreadCount: 3,
-  },
-  {
-    id: '2',
-    friendId: '3',
-    friendName: 'Marcus Johnson',
-    friendAvatar: undefined,
-    isOnline: true,
-    lastMessage: 'Can you review the designs when you...',
-    lastMessageTime: '1h ago',
-    unreadCount: 0,
-  },
-  {
-    id: '3',
-    friendId: '4',
-    friendName: 'Emma Williams',
-    friendAvatar: undefined,
-    isOnline: false,
-    lastMessage: 'Thanks for the feedback!',
-    lastMessageTime: 'Yesterday',
-    unreadCount: 1,
-  },
-  {
-    id: '4',
-    friendId: '5',
-    friendName: 'Alex Rodriguez',
-    friendAvatar: undefined,
-    isOnline: true,
-    lastMessage: 'Let us sync up tomorrow morning',
-    lastMessageTime: '2d ago',
-    unreadCount: 0,
-  },
-];
-
 const MOCK_SEED: Record<string, { senderId: string; senderName: string; content: string; offset: number }[]> = {
   '1': [
-    { senderId: '2', senderName: 'Sarah Chen',    content: 'Hey! Did you see the new designs for the dashboard?',            offset: 240000 },
-    { senderId: 'me', senderName: 'You',          content: 'I think we need to adjust the spacing on the cards',             offset: 180000 },
-    { senderId: '2', senderName: 'Sarah Chen',    content: 'Yeah I saw them, they look great overall',                       offset: 150000 },
-    { senderId: 'me', senderName: 'You',          content: 'Good catch on the spacing, let me update that',                  offset: 90000  },
-    { senderId: '2', senderName: 'Sarah Chen',    content: 'Sounds good! I will update the board once you push the changes', offset: 60000  },
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Hey! Did you see the new designs for the dashboard?',            offset: 240000 },
+    { senderId: 'me', senderName: 'You',            content: 'I think we need to adjust the spacing on the cards',             offset: 180000 },
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Yeah I saw them, they look great overall',                       offset: 150000 },
+    { senderId: 'me', senderName: 'You',            content: 'Good catch on the spacing, let me update that',                  offset: 90000  },
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Sounds good! I will update the board once you push the changes', offset: 60000  },
   ],
   '2': [
-    { senderId: '3', senderName: 'Marcus Johnson', content: 'Can you review the designs when you get a chance?', offset: 3600000 },
+    { senderId: '3',  senderName: 'Marcus Johnson', content: 'Can you review the designs when you get a chance?', offset: 3600000 },
   ],
   '3': [
-    { senderId: 'me', senderName: 'You',         content: 'Great work on the presentation!', offset: 86400000 },
-    { senderId: '4', senderName: 'Emma Williams', content: 'Thanks for the feedback!',       offset: 86000000 },
+    { senderId: 'me', senderName: 'You',            content: 'Great work on the presentation!', offset: 86400000 },
+    { senderId: '4',  senderName: 'Emma Williams',  content: 'Thanks for the feedback!',        offset: 86000000 },
   ],
   '4': [],
 };
@@ -78,7 +34,6 @@ export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelP
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const { messages, sendMessage, loadMessages } = useChat({ currentUserId });
 
-  // Carrega mock ao abrir o painel pela primeira vez
   useEffect(() => {
     Object.entries(MOCK_SEED).forEach(([roomId, seed]) => {
       const msgs = seed.map((m, i) => ({
@@ -109,7 +64,6 @@ export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelP
     <div style={{ position: 'fixed', right: 0, top: 0, height: '100%', width: 384, background: '#1A1A1A', boxShadow: '0 0 40px rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {selectedConversationId && selectedConversation ? (
         <>
-          {/* header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #222222' }}>
             <button
               onClick={() => setSelectedConversationId(null)}
