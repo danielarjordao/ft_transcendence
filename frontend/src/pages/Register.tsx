@@ -67,35 +67,47 @@ export default function Register() {
     setErrors(prev => ({ ...prev, [field]: e[field] }));
   };
 
-  const handleSubmit = async () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
     setIsLoading(true);
     setServerError('');
+
     try {
       const res = await authService.register({
-        fullName: form.fullName,
-        username: form.username,
         email: form.email,
+        username: form.username,
         password: form.password,
+        fullName: form.fullName,
       });
       login(res.accessToken, res.user);
       navigate('/dashboard');
     } catch (err: any) {
-      if (err.response?.status === 409) {
-        const msg = err.response?.data?.message || '';
-        if (msg.toLowerCase().includes('username')) setErrors(prev => ({ ...prev, username: 'Username already taken.' }));
-        else if (msg.toLowerCase().includes('email')) setErrors(prev => ({ ...prev, email: 'Email already registered.' }));
-        else setServerError('Account already exists. Try logging in.');
+      const status = err.response?.status;
+      const type = err.response?.data?.type;
+
+      if (status === 409 && type === 'username_taken') {
+        setErrors(prev => ({ ...prev, username: 'Este username já está em uso.' }));
       } else {
-        setServerError('Something went wrong. Please try again.');
+        setServerError(err.response?.data?.message ?? 'Erro ao criar conta. Tenta novamente.');
       }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isFormValid = form.fullName.trim() && form.username.trim() && form.email.trim() && form.password.length >= 8 && form.password === form.confirmPassword;
+  const isFormValid =
+    form.fullName.trim() &&
+    form.username.trim() &&
+    form.email.trim() &&
+    form.password.length >= 8 &&
+    form.password === form.confirmPassword;
 
   const inputStyle = (field: keyof FormErrors) => ({
     width: '100%',
