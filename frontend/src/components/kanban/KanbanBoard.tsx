@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Navbar from '../layout/Navbar';
 import { ProfilePanel } from '../ProfilePanel';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { KanbanColumn } from './KanbanColumn';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -139,8 +139,8 @@ function MembersPanel({ open, onClose, workspaceName }: {
     { id: 'm3', username: 'daniela_be',  role: 'Member' },
     { id: 'm4', username: 'murilo_db',   role: 'Member' },
   ]);
-  const [addInput, setAddInput]   = useState('');
-  const [addError, setAddError]   = useState('');
+  const [addInput, setAddInput]     = useState('');
+  const [addError, setAddError]     = useState('');
   const [addSuccess, setAddSuccess] = useState('');
 
   const handleAdd = () => {
@@ -158,9 +158,7 @@ function MembersPanel({ open, onClose, workspaceName }: {
     setTimeout(() => setAddSuccess(''), 3000);
   };
 
-  const handleRemove = (id: string) => {
-    setMembers(prev => prev.filter(m => m.id !== id));
-  };
+  const handleRemove = (id: string) => setMembers(prev => prev.filter(m => m.id !== id));
 
   useEffect(() => {
     if (!open) return;
@@ -173,20 +171,8 @@ function MembersPanel({ open, onClose, workspaceName }: {
 
   return (
     <>
-      {/* backdrop */}
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
-
-      {/* drawer */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 340,
-        background: '#1A1A1A',
-        borderLeft: '1px solid #2A2A2A',
-        zIndex: 61,
-        display: 'flex', flexDirection: 'column',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-      }}>
-        {/* header */}
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 340, background: '#1A1A1A', borderLeft: '1px solid #2A2A2A', zIndex: 61, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <p style={{ color: '#EEEEEE', fontSize: 15, fontWeight: 700 }}>Members</p>
@@ -196,76 +182,36 @@ function MembersPanel({ open, onClose, workspaceName }: {
             onMouseEnter={e => (e.currentTarget.style.color = '#CCC')}
             onMouseLeave={e => (e.currentTarget.style.color = '#555')}>✕</button>
         </div>
-
-        {/* add member */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', flexShrink: 0 }}>
           <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Add member</p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              value={addInput}
-              onChange={e => { setAddInput(e.target.value); setAddError(''); }}
-              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-              placeholder="Enter username..."
-              style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '8px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
-            />
-            <button
-              onClick={handleAdd}
-              disabled={!addInput.trim()}
-              style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}
-            >
-              Add
-            </button>
+            <input value={addInput} onChange={e => { setAddInput(e.target.value); setAddError(''); }} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} placeholder="Enter username..."
+              style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '8px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+            <button onClick={handleAdd} disabled={!addInput.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}>Add</button>
           </div>
-          {addError && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{addError}</p>}
+          {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{addError}</p>}
           {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 6 }}>{addSuccess}</p>}
         </div>
-
-        {/* member list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
           {members.map(m => (
-            <div
-              key={m.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #222222' }}
-            >
-              {/* avatar */}
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #222222' }}>
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#CCCCCC', fontSize: 13, fontWeight: 700 }}>
-                  {m.username.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
-                </span>
+                <span style={{ color: '#CCCCCC', fontSize: 13, fontWeight: 700 }}>{m.username.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</span>
               </div>
-
-              {/* info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 500 }}>@{m.username}</p>
-                <span style={{
-                  fontSize: 10, fontWeight: 600,
-                  color: m.role === 'Admin' ? '#7B68EE' : '#555',
-                  textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>
-                  {m.role}
-                </span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: m.role === 'Admin' ? '#7B68EE' : '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.role}</span>
               </div>
-
-              {/* remove — não aparece para o Admin */}
               {m.role !== 'Admin' && (
-                <button
-                  onClick={() => handleRemove(m.id)}
-                  style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', cursor: 'pointer', fontSize: 12, padding: '4px 10px', fontFamily: 'inherit' }}
+                <button onClick={() => handleRemove(m.id)} style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', cursor: 'pointer', fontSize: 12, padding: '4px 10px', fontFamily: 'inherit' }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; }}
-                >
-                  Remove
-                </button>
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; }}>Remove</button>
               )}
             </div>
           ))}
         </div>
-
-        {/* footer */}
         <div style={{ padding: '14px 20px', borderTop: '1px solid #2A2A2A', flexShrink: 0 }}>
-          <p style={{ color: '#444', fontSize: 11, textAlign: 'center' }}>
-            TODO: conectar a GET /api/workspaces/:id/members
-          </p>
+          <p style={{ color: '#444', fontSize: 11, textAlign: 'center' }}>TODO: conectar a GET /api/workspaces/:id/members</p>
         </div>
       </div>
     </>
@@ -283,12 +229,7 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
   const [local, setLocal] = useState<Filters>({ ...filters });
 
   const toggle = (key: keyof Filters, val: string) => {
-    setLocal(prev => ({
-      ...prev,
-      [key]: prev[key].includes(val)
-        ? prev[key].filter(v => v !== val)
-        : [...prev[key], val],
-    }));
+    setLocal(prev => ({ ...prev, [key]: prev[key].includes(val) ? prev[key].filter(v => v !== val) : [...prev[key], val] }));
   };
 
   const activeCount = local.priority.length + local.assignee.length + local.subjectId.length;
@@ -307,19 +248,14 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
       <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 300, background: '#1A1A1A', border: '1px solid #3A3A3A', borderRadius: 10, zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600 }}>Filter tasks</span>
-          {activeCount > 0 && (
-            <button onClick={() => setLocal({ priority: [], assignee: [], subjectId: [] })}
-              style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
-          )}
+          {activeCount > 0 && <button onClick={() => setLocal({ priority: [], assignee: [], subjectId: [] })} style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>}
         </div>
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Priority</p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {[{ val: 'high', color: '#FF6B6B' }, { val: 'medium', color: '#FFA500' }, { val: 'low', color: '#888888' }].map(({ val, color }) => (
-                <button key={val} onClick={() => toggle('priority', val)} style={chipStyle(local.priority.includes(val), color)}>
-                  {val.charAt(0).toUpperCase() + val.slice(1)}
-                </button>
+                <button key={val} onClick={() => toggle('priority', val)} style={chipStyle(local.priority.includes(val), color)}>{val.charAt(0).toUpperCase() + val.slice(1)}</button>
               ))}
             </div>
           </div>
@@ -344,8 +280,7 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
                 {subjects.map(s => (
                   <button key={s.id} onClick={() => toggle('subjectId', s.id)} style={chipStyle(local.subjectId.includes(s.id), s.color)}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-                      {s.name}
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, flexShrink: 0 }} />{s.name}
                     </span>
                   </button>
                 ))}
@@ -378,11 +313,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
 
   const submitComment = () => {
     if (!comment.trim()) return;
-    const updated: Task = {
-      ...task,
-      comments: [...task.comments, { id: `c${Date.now()}`, author: 'ana_laura', text: comment.trim(), ts: 'Just now' }],
-    };
-    onUpdate(updated);
+    onUpdate({ ...task, comments: [...task.comments, { id: `c${Date.now()}`, author: 'ana_laura', text: comment.trim(), ts: 'Just now' }] });
     setComment('');
   };
 
@@ -424,9 +355,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>{task.description || 'No description provided.'}</p>
         </div>
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
-          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>
-            ATTACHMENTS {detailFiles.length > 0 && `(${detailFiles.length})`}
-          </p>
+          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>ATTACHMENTS {detailFiles.length > 0 && `(${detailFiles.length})`}</p>
           <AttachmentZone files={detailFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px' }}>
@@ -464,19 +393,19 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
   onClose: () => void;
   onCreate: (task: Task) => void;
 }) {
-  const [title, setTitle]         = useState('');
-  const [description, setDesc]    = useState('');
-  const [priority, setPriority]   = useState<Task['priority']>('medium');
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? '');
-  const [assignee, setAssignee]   = useState('');
-  const [status, setStatus]       = useState(initialStatus);
-  const [dueDate, setDueDate]     = useState('');
+  const [title, setTitle]                 = useState('');
+  const [description, setDesc]            = useState('');
+  const [priority, setPriority]           = useState<Task['priority']>('medium');
+  const [subjectId, setSubjectId]         = useState(subjects[0]?.id ?? '');
+  const [assignee, setAssignee]           = useState('');
+  const [status, setStatus]               = useState(initialStatus);
+  const [dueDate, setDueDate]             = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
-  const labelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' };
+  const labelStyle: React.CSSProperties  = { fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' };
   const selectStyle: React.CSSProperties = { width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '9px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', cursor: 'pointer', appearance: 'none' };
 
-  const handleAddFiles = (newFiles: AttachedFile[]) => setAttachedFiles(prev => [...prev, ...newFiles]);
+  const handleAddFiles   = (newFiles: AttachedFile[]) => setAttachedFiles(prev => [...prev, ...newFiles]);
   const handleRemoveFile = (index: number) => {
     setAttachedFiles(prev => {
       const f = prev[index];
@@ -487,8 +416,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
 
   const handleCreate = () => {
     if (!title.trim()) return;
-    const validFiles = attachedFiles.filter(f => !f.error);
-    onCreate({ id: `t${Date.now()}`, title: title.trim(), description: description.trim(), status, priority, subjectId: subjectId || undefined, dueDate: dueDate || undefined, assignee: assignee || undefined, attachments: validFiles.map(f => ({ name: f.file.name, type: f.file.type })), comments: [] });
+    onCreate({ id: `t${Date.now()}`, title: title.trim(), description: description.trim(), status, priority, subjectId: subjectId || undefined, dueDate: dueDate || undefined, assignee: assignee || undefined, attachments: attachedFiles.filter(f => !f.error).map(f => ({ name: f.file.name, type: f.file.type })), comments: [] });
     onClose();
   };
 
@@ -655,17 +583,17 @@ export default function KanbanBoard() {
   const { user } = useAuth();
   const { getBoard, updateBoard, workspaces } = useWorkspaceStore();
 
-  const board = getBoard(workspaceId ?? '');
+  const board     = getBoard(workspaceId ?? '');
   const workspace = workspaces.find(w => w.id === workspaceId);
 
-  const [tasks, setTasks]                   = useState<Task[]>(board.tasks);
-  const [subjects, setSubjects]             = useState<Subject[]>(board.subjects);
-  const [fields, setFields]                 = useState(board.fields);
-  const [draggingId, setDraggingId]         = useState<string | null>(null);
-  const [selectedTask, setSelectedTask]     = useState<Task | null>(null);
-  const [createStatus, setCreateStatus]     = useState<string | null>(null);
-  const [search, setSearch]                 = useState('');
-  const [activeSubject, setActiveSubject]   = useState<string | null>(null);
+  const [tasks, setTasks]                 = useState<Task[]>(board.tasks);
+  const [subjects, setSubjects]           = useState<Subject[]>(board.subjects);
+  const [fields, setFields]               = useState(board.fields);
+  const [draggingId, setDraggingId]       = useState<string | null>(null);
+  const [selectedTask, setSelectedTask]   = useState<Task | null>(null);
+  const [createStatus, setCreateStatus]   = useState<string | null>(null);
+  const [search, setSearch]               = useState('');
+  const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showAddField, setShowAddField]     = useState(false);
   const [profileOpen, setProfileOpen]       = useState(false);
@@ -696,12 +624,7 @@ export default function KanbanBoard() {
 
   const visibleTasks = sortTasks(filteredTasks, sortBy);
 
-  const handleDrop = (newStatus: string) => {
-    if (!draggingId) return;
-    setTasks(prev => prev.map(t => t.id === draggingId ? { ...t, status: newStatus } : t));
-    setDraggingId(null);
-  };
-
+  const handleDrop   = (newStatus: string) => { if (!draggingId) return; setTasks(prev => prev.map(t => t.id === draggingId ? { ...t, status: newStatus } : t)); setDraggingId(null); };
   const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
   const handleUpdate = (updated: Task) => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setSelectedTask(updated); };
   const removeFilter = (key: keyof Filters, val: string) => setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
@@ -715,7 +638,21 @@ export default function KanbanBoard() {
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>{workspace?.name ?? workspaceId ?? 'Workspace'}</h1>
-            <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>{tasks.length} task{tasks.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2 }}>
+              <p style={{ color: '#888888', fontSize: '12px' }}>{tasks.length} task{tasks.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</p>
+              <Link
+                to={`/board/${workspaceId}/settings`}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#555', fontSize: 11, textDecoration: 'none' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#888')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Settings
+              </Link>
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks..."
@@ -749,8 +686,7 @@ export default function KanbanBoard() {
                         style={{ width: '100%', padding: '10px 14px', background: sortBy === opt ? '#7B68EE22' : 'transparent', border: 'none', color: sortBy === opt ? '#7B68EE' : '#CCC', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit', textAlign: 'left' }}
                         onMouseEnter={e => { if (sortBy !== opt) e.currentTarget.style.background = '#222'; }}
                         onMouseLeave={e => { if (sortBy !== opt) e.currentTarget.style.background = 'transparent'; }}>
-                        {SORT_LABELS[opt]}
-                        {sortBy === opt && <span style={{ fontSize: 12 }}>✓</span>}
+                        {SORT_LABELS[opt]}{sortBy === opt && <span style={{ fontSize: 12 }}>✓</span>}
                       </button>
                     ))}
                   </div>
@@ -758,13 +694,11 @@ export default function KanbanBoard() {
               )}
             </div>
 
-            {/* members button — agora funciona */}
-            <button
-              onClick={() => setMembersOpen(true)}
+            {/* members */}
+            <button onClick={() => setMembersOpen(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: '1px solid #2A2A2A', background: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCC'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#888'; }}
-            >
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#888'; }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                 <circle cx="9" cy="7" r="4"/>
@@ -830,8 +764,8 @@ export default function KanbanBoard() {
         </div>
 
         {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />}
-        {showAddField && <AddFieldModal onClose={() => setShowAddField(false)} onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }} />}
-        {selectedTask && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} />}
+        {showAddField   && <AddFieldModal   onClose={() => setShowAddField(false)}   onCreate={field   => { setFields(prev => [...prev, field]);     setShowAddField(false);   }} />}
+        {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} />}
         {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
       </div>
 

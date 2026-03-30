@@ -11,11 +11,12 @@ import KanbanBoard from './components/kanban/KanbanBoard';
 import Friends from './pages/Friends';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import WorkspaceSettings from './pages/WorkspaceSettings';
 
 export default function App() {
   return (
     <AuthProvider>
-      <SocketProvider>a
+      <SocketProvider>
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -45,6 +46,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <KanbanBoard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/board/:workspaceId/settings"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceSettings />
                 </ProtectedRoute>
               }
             />
