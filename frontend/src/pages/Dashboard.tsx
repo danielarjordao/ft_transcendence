@@ -1,6 +1,6 @@
 import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
-import { useNavigate } from 'react-router-dom';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { useAuth } from '../contexts/AuthContext';
 import ChatPanel from '../components/chat/ChatPanel';
@@ -19,12 +19,6 @@ const T = {
 };
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
-const IconGrid = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-  </svg>
-);
 const IconSearch = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -194,12 +188,21 @@ export default function Dashboard() {
         </div>
 
         <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
-
         <ChatPanel
           isOpen={chatOpen}
           onClose={() => setChatOpen(false)}
           currentUserId={user?.id || '1'}
         />
+      </div>
+
+      {/* Footer */}
+      <div style={{ borderTop: '1px solid #2A2A2A', padding: '14px 24px', display: 'flex', gap: 20, flexShrink: 0 }}>
+        <Link to="/privacy-policy" style={{ color: '#555', fontSize: 12, textDecoration: 'none' }}>
+          Privacy Policy
+        </Link>
+        <Link to="/terms-of-service" style={{ color: '#555', fontSize: 12, textDecoration: 'none' }}>
+          Terms of Service
+        </Link>
       </div>
     </div>
   );
