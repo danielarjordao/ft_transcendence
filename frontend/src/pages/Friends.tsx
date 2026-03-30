@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
+import ChatPanel from '../components/chat/ChatPanel';
+import { useAuth } from '../contexts/AuthContext';
 
 // ── tipos ─────────────────────────────────────────────────────────────────────
 
@@ -32,12 +34,12 @@ const MOCK_FRIENDS: Friend[] = [
 ];
 
 const MOCK_RECEIVED: FriendRequest[] = [
-  { id: 'r1', username: 'joao_42',    fullName: 'João',    avatarUrl: null, sentAt: '2h ago'      },
-  { id: 'r2', username: 'carla_dev',  fullName: 'Carla',   avatarUrl: null, sentAt: 'Yesterday'   },
+  { id: 'r1', username: 'joao_42',    fullName: 'João',    avatarUrl: null, sentAt: '2h ago'    },
+  { id: 'r2', username: 'carla_dev',  fullName: 'Carla',   avatarUrl: null, sentAt: 'Yesterday' },
 ];
 
 const MOCK_SENT: FriendRequest[] = [
-  { id: 's1', username: 'pedro_ui',   fullName: 'Pedro',   avatarUrl: null, sentAt: '1d ago'      },
+  { id: 's1', username: 'pedro_ui',   fullName: 'Pedro',   avatarUrl: null, sentAt: '1d ago'    },
 ];
 
 // ── avatar ────────────────────────────────────────────────────────────────────
@@ -58,6 +60,8 @@ function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
 // ── componente principal ──────────────────────────────────────────────────────
 
 export default function Friends() {
+  const { user } = useAuth();
+
   const [tab, setTab]                   = useState<Tab>('friends');
   const [friends, setFriends]           = useState<Friend[]>(MOCK_FRIENDS);
   const [received, setReceived]         = useState<FriendRequest[]>(MOCK_RECEIVED);
@@ -67,9 +71,11 @@ export default function Friends() {
   const [addError, setAddError]         = useState('');
   const [addSuccess, setAddSuccess]     = useState('');
   const [profileOpen, setProfileOpen]   = useState(false);
+  const [chatOpen, setChatOpen]         = useState(false);
+  const [chatFriendId, setChatFriendId] = useState<string | null>(null);
 
-  const onlineCount   = friends.filter(f => f.online).length;
-  const pendingCount  = received.length;
+  const onlineCount  = friends.filter(f => f.online).length;
+  const pendingCount = received.length;
 
   const filteredFriends = friends.filter(f =>
     f.username.toLowerCase().includes(search.toLowerCase()) ||
@@ -131,6 +137,11 @@ export default function Friends() {
   const handleCancelRequest = (id: string) => {
     // TODO: DELETE /api/friends/request/:id
     setSent(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleOpenChat = (friendId: string) => {
+    setChatFriendId(friendId);
+    setChatOpen(true);
   };
 
   // ── estilos compartilhados ────────────────────────────────────────────────
@@ -257,6 +268,7 @@ export default function Friends() {
                     </span>
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button
+                        onClick={() => handleOpenChat(friend.id)}
                         style={{ ...btnBase, color: '#CCCCCC' }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#555'; e.currentTarget.style.color = '#FFF'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCCCCC'; }}
@@ -349,6 +361,11 @@ export default function Friends() {
       </div>
 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
+      <ChatPanel
+        isOpen={chatOpen}
+        onClose={() => { setChatOpen(false); setChatFriendId(null); }}
+        currentUserId={user?.id ?? '1'}
+      />
     </div>
   );
 }
