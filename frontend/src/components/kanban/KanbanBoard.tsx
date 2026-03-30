@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Navbar from '../layout/Navbar';
 import { ProfilePanel } from '../ProfilePanel';
 import { useParams } from 'react-router-dom';
@@ -19,10 +19,139 @@ const PRESET_COLORS = [
 
 const MOCK_MEMBERS = ['ana_laura', 'lucas_dev', 'daniela_be', 'murilo_db'];
 
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+const MAX_SIZE_MB = 10;
+
+type SortOption = 'none' | 'due_date' | 'priority' | 'created';
+
 interface Filters {
   priority: string[];
   assignee: string[];
   subjectId: string[];
+}
+
+interface AttachedFile {
+  file: File;
+  previewUrl: string | null;
+  error: string | null;
+}
+
+// ── file utils ────────────────────────────────────────────────────────────────
+
+function validateFile(file: File): string | null {
+  if (!ALLOWED_TYPES.includes(file.type)) return 'Tipo não permitido. Use imagens, PDF ou documentos Word.';
+  if (file.size > MAX_SIZE_MB * 1024 * 1024) return `Arquivo muito grande. Máximo ${MAX_SIZE_MB}MB.`;
+  return null;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ── attachment zone ───────────────────────────────────────────────────────────
+
+function AttachmentZone({ files, onAdd, onRemove }: {
+  files: AttachedFile[];
+  onAdd: (files: AttachedFile[]) => void;
+  onRemove: (index: number) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+
+  const processFiles = (rawFiles: FileList | null) => {
+    if (!rawFiles) return;
+    const newFiles: AttachedFile[] = Array.from(rawFiles).map(file => {
+      const error = validateFile(file);
+      const previewUrl = !error && file.type.startsWith('image/')
+        ? URL.createObjectURL(file)
+        : null;
+      return { file, previewUrl, error };
+    });
+    onAdd(newFiles);
+  };
+
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        multiple
+        accept={ALLOWED_TYPES.join(',')}
+        style={{ display: 'none' }}
+        onChange={e => processFiles(e.target.files)}
+      />
+
+      {/* drop zone */}
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={e => { e.preventDefault(); setDragOver(false); processFiles(e.dataTransfer.files); }}
+        style={{
+          border: `1px dashed ${dragOver ? '#7B68EE' : '#3A3A3A'}`,
+          borderRadius: '8px', padding: '20px',
+          textAlign: 'center', cursor: 'pointer',
+          background: dragOver ? '#7B68EE11' : '#1A1A1A',
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = '#555')}
+        onMouseLeave={e => { if (!dragOver) e.currentTarget.style.borderColor = '#3A3A3A'; }}
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom: 6 }}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <p style={{ color: '#888', fontSize: '13px', marginBottom: 2 }}>Click or drag files here</p>
+        <p style={{ color: '#555', fontSize: '11px' }}>Images, PDFs, docs — up to {MAX_SIZE_MB}MB each</p>
+      </div>
+
+      {/* file list */}
+      {files.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {files.map((f, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', borderRadius: 8,
+              background: f.error ? '#2A1010' : '#222222',
+              border: `1px solid ${f.error ? '#FF6B6B44' : '#3A3A3A'}`,
+            }}>
+              {/* preview ou ícone */}
+              {f.previewUrl
+                ? <img src={f.previewUrl} alt="" style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
+                : <div style={{ width: 36, height: 36, borderRadius: 4, background: '#2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="1.5" strokeLinecap="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                  </div>
+              }
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: f.error ? '#FF6B6B' : '#F5F5F5', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.file.name}
+                </p>
+                <p style={{ color: f.error ? '#FF6B6B88' : '#666', fontSize: 11 }}>
+                  {f.error ?? formatBytes(f.file.size)}
+                </p>
+              </div>
+
+              <button
+                onClick={() => onRemove(i)}
+                style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 2 }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#FF6B6B')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── filter panel ─────────────────────────────────────────────────────────────
@@ -47,15 +176,11 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
   const activeCount = local.priority.length + local.assignee.length + local.subjectId.length;
 
   const chipStyle = (active: boolean, color?: string): React.CSSProperties => ({
-    padding: '5px 12px',
-    borderRadius: 20,
+    padding: '5px 12px', borderRadius: 20,
     border: `1px solid ${active ? (color ?? '#7B68EE') : '#3A3A3A'}`,
     background: active ? (color ?? '#7B68EE') + '22' : 'transparent',
     color: active ? (color ?? '#F5F5F5') : '#888888',
-    fontSize: 12,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.1s',
+    fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.1s',
   });
 
   return (
@@ -65,33 +190,23 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
         position: 'absolute', top: 'calc(100% + 6px)', right: 0,
         width: 300, background: '#1A1A1A',
         border: '1px solid #3A3A3A', borderRadius: 10,
-        zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        overflow: 'hidden',
+        zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden',
       }}>
-        {/* header */}
         <div style={{ padding: '12px 16px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600 }}>Filter tasks</span>
           {activeCount > 0 && (
-            <button
-              onClick={() => setLocal({ priority: [], assignee: [], subjectId: [] })}
-              style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-            >
+            <button onClick={() => setLocal({ priority: [], assignee: [], subjectId: [] })}
+              style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
               Clear all
             </button>
           )}
         </div>
 
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-
-          {/* priority */}
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Priority</p>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {[
-                { val: 'high',   color: '#FF6B6B' },
-                { val: 'medium', color: '#FFA500' },
-                { val: 'low',    color: '#888888' },
-              ].map(({ val, color }) => (
+              {[{ val: 'high', color: '#FF6B6B' }, { val: 'medium', color: '#FFA500' }, { val: 'low', color: '#888888' }].map(({ val, color }) => (
                 <button key={val} onClick={() => toggle('priority', val)} style={chipStyle(local.priority.includes(val), color)}>
                   {val.charAt(0).toUpperCase() + val.slice(1)}
                 </button>
@@ -99,35 +214,21 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
             </div>
           </div>
 
-          {/* assignee */}
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Assignee</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {MOCK_MEMBERS.map(m => (
-                <button
-                  key={m}
-                  onClick={() => toggle('assignee', m)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    padding: '6px 10px', borderRadius: 8,
-                    border: `1px solid ${local.assignee.includes(m) ? '#7B68EE' : '#2A2A2A'}`,
-                    background: local.assignee.includes(m) ? '#7B68EE22' : 'transparent',
-                    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                  }}
-                >
+                <button key={m} onClick={() => toggle('assignee', m)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${local.assignee.includes(m) ? '#7B68EE' : '#2A2A2A'}`, background: local.assignee.includes(m) ? '#7B68EE22' : 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                   <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <span style={{ color: '#CCC', fontSize: 9, fontWeight: 700 }}>{m[0].toUpperCase()}</span>
                   </div>
                   <span style={{ color: local.assignee.includes(m) ? '#F5F5F5' : '#888', fontSize: 13 }}>{m}</span>
-                  {local.assignee.includes(m) && (
-                    <span style={{ marginLeft: 'auto', color: '#7B68EE', fontSize: 14 }}>✓</span>
-                  )}
+                  {local.assignee.includes(m) && <span style={{ marginLeft: 'auto', color: '#7B68EE', fontSize: 14 }}>✓</span>}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* subject */}
           {subjects.length > 0 && (
             <div>
               <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Subject</p>
@@ -145,15 +246,9 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
           )}
         </div>
 
-        {/* footer */}
         <div style={{ padding: '12px 16px', borderTop: '1px solid #2A2A2A', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid #3A3A3A', background: 'transparent', color: '#CCC', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Cancel
-          </button>
-          <button
-            onClick={() => { onApply(local); onClose(); }}
-            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: '#7B68EE', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
-          >
+          <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid #3A3A3A', background: 'transparent', color: '#CCC', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
+          <button onClick={() => { onApply(local); onClose(); }} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: '#7B68EE', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
             Apply{activeCount > 0 ? ` (${activeCount})` : ''}
           </button>
         </div>
@@ -171,6 +266,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
   onUpdate: (t: Task) => void;
 }) {
   const [comment, setComment] = useState('');
+  const [detailFiles, setDetailFiles] = useState<AttachedFile[]>([]);
   const subject = subjects.find(s => s.id === task.subjectId);
 
   const submitComment = () => {
@@ -186,6 +282,15 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
     };
     onUpdate(updated);
     setComment('');
+  };
+
+  const handleAddFiles = (newFiles: AttachedFile[]) => setDetailFiles(prev => [...prev, ...newFiles]);
+  const handleRemoveFile = (index: number) => {
+    setDetailFiles(prev => {
+      const f = prev[index];
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   return (
@@ -225,10 +330,10 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
         </div>
 
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
-          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>ATTACHMENTS</p>
-          <div style={{ border: '1px dashed #3A3A3A', borderRadius: '6px', padding: '18px', textAlign: 'center', color: '#555555', fontSize: '12px', cursor: 'pointer' }}>
-            ↑ Click or drag files to attach
-          </div>
+          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>
+            ATTACHMENTS {detailFiles.length > 0 && `(${detailFiles.length})`}
+          </p>
+          <AttachmentZone files={detailFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
 
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px' }}>
@@ -280,6 +385,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
   const [assignee, setAssignee]   = useState('');
   const [status, setStatus]       = useState(initialStatus);
   const [dueDate, setDueDate]     = useState('');
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
   const labelStyle: React.CSSProperties = {
     fontSize: '11px', fontWeight: 600, color: '#888888',
@@ -294,8 +400,18 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
     cursor: 'pointer', appearance: 'none',
   };
 
+  const handleAddFiles = (newFiles: AttachedFile[]) => setAttachedFiles(prev => [...prev, ...newFiles]);
+  const handleRemoveFile = (index: number) => {
+    setAttachedFiles(prev => {
+      const f = prev[index];
+      if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   const handleCreate = () => {
     if (!title.trim()) return;
+    const validFiles = attachedFiles.filter(f => !f.error);
     onCreate({
       id: `t${Date.now()}`,
       title: title.trim(),
@@ -305,7 +421,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
       subjectId: subjectId || undefined,
       dueDate: dueDate || undefined,
       assignee: assignee || undefined,
-      attachments: [],
+      attachments: validFiles.map(f => ({ name: f.file.name, type: f.file.type })),
       comments: [],
     });
     onClose();
@@ -361,16 +477,10 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
           </div>
         </div>
         <div>
-          <label style={labelStyle}>ATTACHMENTS</label>
-          <div style={{ border: '1px dashed #3A3A3A', borderRadius: '8px', padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: '#1A1A1A' }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = '#555')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = '#3A3A3A')}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="1.5" strokeLinecap="round" style={{ marginBottom: 8 }}>
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <p style={{ color: '#888', fontSize: '13px', marginBottom: 4 }}>Click or drag files here</p>
-            <p style={{ color: '#555', fontSize: '11px' }}>Images, PDFs, docs, archives — up to 10 MB each</p>
-          </div>
+          <label style={labelStyle}>
+            ATTACHMENTS {attachedFiles.length > 0 && `(${attachedFiles.filter(f => !f.error).length} válido${attachedFiles.filter(f => !f.error).length !== 1 ? 's' : ''})`}
+          </label>
+          <AttachmentZone files={attachedFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
         <div>
           <label style={labelStyle}>COMMENTS</label>
@@ -478,6 +588,31 @@ function AddFieldModal({ onClose, onCreate }: {
   );
 }
 
+// ── sort utils ────────────────────────────────────────────────────────────────
+
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+function sortTasks(tasks: Task[], sortBy: SortOption): Task[] {
+  if (sortBy === 'none') return tasks;
+  return [...tasks].sort((a, b) => {
+    if (sortBy === 'priority') {
+      return (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
+    }
+    if (sortBy === 'due_date') {
+      if (!a.dueDate && !b.dueDate) return 0;
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    }
+    if (sortBy === 'created') {
+      const aId = parseInt(a.id.replace('t', ''));
+      const bId = parseInt(b.id.replace('t', ''));
+      return bId - aId;
+    }
+    return 0;
+  });
+}
+
 // ── main page ────────────────────────────────────────────────────────────────
 
 export default function KanbanBoard() {
@@ -501,6 +636,8 @@ export default function KanbanBoard() {
   const [profileOpen, setProfileOpen]       = useState(false);
   const [chatOpen, setChatOpen]             = useState(false);
   const [filterOpen, setFilterOpen]         = useState(false);
+  const [sortBy, setSortBy]                 = useState<SortOption>('none');
+  const [sortOpen, setSortOpen]             = useState(false);
   const [filters, setFilters]               = useState<Filters>({ priority: [], assignee: [], subjectId: [] });
 
   useEffect(() => {
@@ -510,12 +647,21 @@ export default function KanbanBoard() {
 
   const activeFilterCount = filters.priority.length + filters.assignee.length + filters.subjectId.length;
 
-  const visibleTasks = tasks
+  const SORT_LABELS: Record<SortOption, string> = {
+    none: 'Sort by',
+    due_date: 'Due date',
+    priority: 'Priority',
+    created: 'Created date',
+  };
+
+  const filteredTasks = tasks
     .filter(t => activeSubject ? t.subjectId === activeSubject : true)
     .filter(t => search.trim() ? t.title.toLowerCase().includes(search.toLowerCase()) : true)
     .filter(t => filters.priority.length > 0 ? filters.priority.includes(t.priority) : true)
     .filter(t => filters.assignee.length > 0 ? (t.assignee ? filters.assignee.includes(t.assignee) : false) : true)
     .filter(t => filters.subjectId.length > 0 ? (t.subjectId ? filters.subjectId.includes(t.subjectId) : false) : true);
+
+  const visibleTasks = sortTasks(filteredTasks, sortBy);
 
   const handleDrop = (newStatus: string) => {
     if (!draggingId) return;
@@ -557,32 +703,50 @@ export default function KanbanBoard() {
               style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '6px', padding: '7px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', width: '200px' }}
             />
 
-            {/* filter button */}
+            {/* filter */}
             <div style={{ position: 'relative' }}>
               <button
-                onClick={() => setFilterOpen(o => !o)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '7px 12px', borderRadius: 7,
-                  border: `1px solid ${filterOpen || activeFilterCount > 0 ? '#7B68EE' : '#2A2A2A'}`,
-                  background: filterOpen ? '#7B68EE22' : activeFilterCount > 0 ? '#7B68EE11' : 'transparent',
-                  color: activeFilterCount > 0 ? '#7B68EE' : '#888',
-                  fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-                }}
+                onClick={() => { setFilterOpen(o => !o); setSortOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${filterOpen || activeFilterCount > 0 ? '#7B68EE' : '#2A2A2A'}`, background: filterOpen ? '#7B68EE22' : activeFilterCount > 0 ? '#7B68EE11' : 'transparent', color: activeFilterCount > 0 ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
                 </svg>
                 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </button>
+              {filterOpen && <FilterPanel filters={filters} subjects={subjects} onApply={setFilters} onClose={() => setFilterOpen(false)} />}
+            </div>
 
-              {filterOpen && (
-                <FilterPanel
-                  filters={filters}
-                  subjects={subjects}
-                  onApply={setFilters}
-                  onClose={() => setFilterOpen(false)}
-                />
+            {/* sort */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => { setSortOpen(o => !o); setFilterOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${sortOpen || sortBy !== 'none' ? '#7B68EE' : '#2A2A2A'}`, background: sortOpen ? '#7B68EE22' : sortBy !== 'none' ? '#7B68EE11' : 'transparent', color: sortBy !== 'none' ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/>
+                </svg>
+                {SORT_LABELS[sortBy]}
+              </button>
+
+              {sortOpen && (
+                <>
+                  <div onClick={() => setSortOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 180, background: '#1A1A1A', border: '1px solid #3A3A3A', borderRadius: 10, zIndex: 50, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+                    {(['none', 'due_date', 'priority', 'created'] as SortOption[]).map(opt => (
+                      <button
+                        key={opt}
+                        onClick={() => { setSortBy(opt); setSortOpen(false); }}
+                        style={{ width: '100%', padding: '10px 14px', background: sortBy === opt ? '#7B68EE22' : 'transparent', border: 'none', color: sortBy === opt ? '#7B68EE' : '#CCC', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit', textAlign: 'left' }}
+                        onMouseEnter={e => { if (sortBy !== opt) e.currentTarget.style.background = '#222'; }}
+                        onMouseLeave={e => { if (sortBy !== opt) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        {SORT_LABELS[opt]}
+                        {sortBy === opt && <span style={{ fontSize: 12 }}>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
 
@@ -593,7 +757,7 @@ export default function KanbanBoard() {
 
         {/* active filter tags */}
         {activeFilterCount > 0 && (
-          <div style={{ padding: '8px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0, background: '#111111' }}>
+          <div style={{ padding: '8px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
             <span style={{ color: '#555', fontSize: 11, marginRight: 2 }}>Filtered by:</span>
             {filters.priority.map(p => (
               <span key={p} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, background: '#2A2A2A', border: '1px solid #3A3A3A', fontSize: 11, color: '#CCC' }}>
@@ -617,10 +781,7 @@ export default function KanbanBoard() {
                 </span>
               ) : null;
             })}
-            <button
-              onClick={() => setFilters({ priority: [], assignee: [], subjectId: [] })}
-              style={{ marginLeft: 4, color: '#7B68EE', fontSize: 11, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
-            >
+            <button onClick={() => setFilters({ priority: [], assignee: [], subjectId: [] })} style={{ marginLeft: 4, color: '#7B68EE', fontSize: 11, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
               Clear all
             </button>
           </div>
@@ -677,19 +838,10 @@ export default function KanbanBoard() {
           </div>
         </div>
 
-        {/* modals */}
-        {showAddSubject && (
-          <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />
-        )}
-        {showAddField && (
-          <AddFieldModal onClose={() => setShowAddField(false)} onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }} />
-        )}
-        {selectedTask && (
-          <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} />
-        )}
-        {createStatus !== null && (
-          <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />
-        )}
+        {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />}
+        {showAddField && <AddFieldModal onClose={() => setShowAddField(false)} onCreate={field => { setFields(prev => [...prev, field]); setShowAddField(false); }} />}
+        {selectedTask && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} />}
+        {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
       </div>
 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
