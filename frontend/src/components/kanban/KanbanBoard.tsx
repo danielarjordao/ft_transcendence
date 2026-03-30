@@ -36,6 +36,12 @@ interface AttachedFile {
   error: string | null;
 }
 
+interface Member {
+  id: string;
+  username: string;
+  role: 'Admin' | 'Member';
+}
+
 // ── file utils ────────────────────────────────────────────────────────────────
 
 function validateFile(file: File): string | null {
@@ -74,28 +80,13 @@ function AttachmentZone({ files, onAdd, onRemove }: {
 
   return (
     <div>
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={ALLOWED_TYPES.join(',')}
-        style={{ display: 'none' }}
-        onChange={e => processFiles(e.target.files)}
-      />
-
-      {/* drop zone */}
+      <input ref={inputRef} type="file" multiple accept={ALLOWED_TYPES.join(',')} style={{ display: 'none' }} onChange={e => processFiles(e.target.files)} />
       <div
         onClick={() => inputRef.current?.click()}
         onDragOver={e => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={e => { e.preventDefault(); setDragOver(false); processFiles(e.dataTransfer.files); }}
-        style={{
-          border: `1px dashed ${dragOver ? '#7B68EE' : '#3A3A3A'}`,
-          borderRadius: '8px', padding: '20px',
-          textAlign: 'center', cursor: 'pointer',
-          background: dragOver ? '#7B68EE11' : '#1A1A1A',
-          transition: 'all 0.15s',
-        }}
+        style={{ border: `1px dashed ${dragOver ? '#7B68EE' : '#3A3A3A'}`, borderRadius: '8px', padding: '20px', textAlign: 'center', cursor: 'pointer', background: dragOver ? '#7B68EE11' : '#1A1A1A', transition: 'all 0.15s' }}
         onMouseEnter={e => (e.currentTarget.style.borderColor = '#555')}
         onMouseLeave={e => { if (!dragOver) e.currentTarget.style.borderColor = '#3A3A3A'; }}
       >
@@ -107,18 +98,10 @@ function AttachmentZone({ files, onAdd, onRemove }: {
         <p style={{ color: '#888', fontSize: '13px', marginBottom: 2 }}>Click or drag files here</p>
         <p style={{ color: '#555', fontSize: '11px' }}>Images, PDFs, docs — up to {MAX_SIZE_MB}MB each</p>
       </div>
-
-      {/* file list */}
       {files.length > 0 && (
         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {files.map((f, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 10px', borderRadius: 8,
-              background: f.error ? '#2A1010' : '#222222',
-              border: `1px solid ${f.error ? '#FF6B6B44' : '#3A3A3A'}`,
-            }}>
-              {/* preview ou ícone */}
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: f.error ? '#2A1010' : '#222222', border: `1px solid ${f.error ? '#FF6B6B44' : '#3A3A3A'}` }}>
               {f.previewUrl
                 ? <img src={f.previewUrl} alt="" style={{ width: 36, height: 36, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }} />
                 : <div style={{ width: 36, height: 36, borderRadius: 4, background: '#2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -128,29 +111,164 @@ function AttachmentZone({ files, onAdd, onRemove }: {
                     </svg>
                   </div>
               }
-
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: f.error ? '#FF6B6B' : '#F5F5F5', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {f.file.name}
-                </p>
-                <p style={{ color: f.error ? '#FF6B6B88' : '#666', fontSize: 11 }}>
-                  {f.error ?? formatBytes(f.file.size)}
-                </p>
+                <p style={{ color: f.error ? '#FF6B6B' : '#F5F5F5', fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file.name}</p>
+                <p style={{ color: f.error ? '#FF6B6B88' : '#666', fontSize: 11 }}>{f.error ?? formatBytes(f.file.size)}</p>
               </div>
-
-              <button
-                onClick={() => onRemove(i)}
-                style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 2 }}
+              <button onClick={() => onRemove(i)} style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: 16, lineHeight: 1, flexShrink: 0, padding: 2 }}
                 onMouseEnter={e => (e.currentTarget.style.color = '#FF6B6B')}
-                onMouseLeave={e => (e.currentTarget.style.color = '#555')}
-              >
-                ✕
-              </button>
+                onMouseLeave={e => (e.currentTarget.style.color = '#555')}>✕</button>
             </div>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+// ── members panel ─────────────────────────────────────────────────────────────
+
+function MembersPanel({ open, onClose, workspaceName }: {
+  open: boolean;
+  onClose: () => void;
+  workspaceName: string;
+}) {
+  const [members, setMembers] = useState<Member[]>([
+    { id: 'm1', username: 'ana_laura',   role: 'Admin'  },
+    { id: 'm2', username: 'lucas_dev',   role: 'Member' },
+    { id: 'm3', username: 'daniela_be',  role: 'Member' },
+    { id: 'm4', username: 'murilo_db',   role: 'Member' },
+  ]);
+  const [addInput, setAddInput]   = useState('');
+  const [addError, setAddError]   = useState('');
+  const [addSuccess, setAddSuccess] = useState('');
+
+  const handleAdd = () => {
+    const username = addInput.trim().toLowerCase();
+    if (!username) return;
+    if (members.some(m => m.username === username)) {
+      setAddError('This user is already a member.');
+      setAddSuccess('');
+      return;
+    }
+    setMembers(prev => [...prev, { id: `m${Date.now()}`, username, role: 'Member' }]);
+    setAddInput('');
+    setAddError('');
+    setAddSuccess(`@${username} added to workspace.`);
+    setTimeout(() => setAddSuccess(''), 3000);
+  };
+
+  const handleRemove = (id: string) => {
+    setMembers(prev => prev.filter(m => m.id !== id));
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handle);
+    return () => document.removeEventListener('keydown', handle);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <>
+      {/* backdrop */}
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 60 }} />
+
+      {/* drawer */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0,
+        width: 340,
+        background: '#1A1A1A',
+        borderLeft: '1px solid #2A2A2A',
+        zIndex: 61,
+        display: 'flex', flexDirection: 'column',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}>
+        {/* header */}
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <p style={{ color: '#EEEEEE', fontSize: 15, fontWeight: 700 }}>Members</p>
+            <p style={{ color: '#555', fontSize: 12, marginTop: 2 }}>{workspaceName} · {members.length} member{members.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#555', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 4 }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#CCC')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#555')}>✕</button>
+        </div>
+
+        {/* add member */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', flexShrink: 0 }}>
+          <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Add member</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={addInput}
+              onChange={e => { setAddInput(e.target.value); setAddError(''); }}
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+              placeholder="Enter username..."
+              style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '8px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+            />
+            <button
+              onClick={handleAdd}
+              disabled={!addInput.trim()}
+              style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}
+            >
+              Add
+            </button>
+          </div>
+          {addError && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{addError}</p>}
+          {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 6 }}>{addSuccess}</p>}
+        </div>
+
+        {/* member list */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {members.map(m => (
+            <div
+              key={m.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #222222' }}
+            >
+              {/* avatar */}
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ color: '#CCCCCC', fontSize: 13, fontWeight: 700 }}>
+                  {m.username.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                </span>
+              </div>
+
+              {/* info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 500 }}>@{m.username}</p>
+                <span style={{
+                  fontSize: 10, fontWeight: 600,
+                  color: m.role === 'Admin' ? '#7B68EE' : '#555',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  {m.role}
+                </span>
+              </div>
+
+              {/* remove — não aparece para o Admin */}
+              {m.role !== 'Admin' && (
+                <button
+                  onClick={() => handleRemove(m.id)}
+                  style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', cursor: 'pointer', fontSize: 12, padding: '4px 10px', fontFamily: 'inherit' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* footer */}
+        <div style={{ padding: '14px 20px', borderTop: '1px solid #2A2A2A', flexShrink: 0 }}>
+          <p style={{ color: '#444', fontSize: 11, textAlign: 'center' }}>
+            TODO: conectar a GET /api/workspaces/:id/members
+          </p>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -186,22 +304,14 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-      <div style={{
-        position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-        width: 300, background: '#1A1A1A',
-        border: '1px solid #3A3A3A', borderRadius: 10,
-        zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden',
-      }}>
+      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 300, background: '#1A1A1A', border: '1px solid #3A3A3A', borderRadius: 10, zIndex: 50, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', overflow: 'hidden' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600 }}>Filter tasks</span>
           {activeCount > 0 && (
             <button onClick={() => setLocal({ priority: [], assignee: [], subjectId: [] })}
-              style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Clear all
-            </button>
+              style={{ color: '#7B68EE', fontSize: 12, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
           )}
         </div>
-
         <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Priority</p>
@@ -213,7 +323,6 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
               ))}
             </div>
           </div>
-
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Assignee</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -228,7 +337,6 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
               ))}
             </div>
           </div>
-
           {subjects.length > 0 && (
             <div>
               <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Subject</p>
@@ -245,7 +353,6 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
             </div>
           )}
         </div>
-
         <div style={{ padding: '12px 16px', borderTop: '1px solid #2A2A2A', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <button onClick={onClose} style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid #3A3A3A', background: 'transparent', color: '#CCC', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
           <button onClick={() => { onApply(local); onClose(); }} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: '#7B68EE', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -273,12 +380,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
     if (!comment.trim()) return;
     const updated: Task = {
       ...task,
-      comments: [...task.comments, {
-        id: `c${Date.now()}`,
-        author: 'ana_laura',
-        text: comment.trim(),
-        ts: 'Just now',
-      }],
+      comments: [...task.comments, { id: `c${Date.now()}`, author: 'ana_laura', text: comment.trim(), ts: 'Just now' }],
     };
     onUpdate(updated);
     setComment('');
@@ -302,17 +404,13 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
         </div>
         <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px' }}>✕</button>
       </div>
-
       <div style={{ padding: '20px 18px', overflowY: 'auto', maxHeight: '70vh' }}>
         <h2 style={{ color: '#F5F5F5', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>{task.title}</h2>
-
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: '#2A2A2A', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
           {[
             { label: 'PRIORITY', value: <Badge variant={task.priority} /> },
             { label: 'STATUS',   value: <Badge variant={task.status} /> },
-            { label: 'ASSIGNEE', value: task.assignee
-                ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Avatar name={task.assignee} size="sm" /><span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.assignee}</span></div>
-                : <span style={{ color: '#888888', fontSize: '13px' }}>Unassigned</span> },
+            { label: 'ASSIGNEE', value: task.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Avatar name={task.assignee} size="sm" /><span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.assignee}</span></div> : <span style={{ color: '#888888', fontSize: '13px' }}>Unassigned</span> },
             { label: 'DUE DATE', value: <span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.dueDate ?? 'No date'}</span> },
           ].map(({ label, value }) => (
             <div key={label} style={{ background: '#1A1A1A', padding: '12px 14px' }}>
@@ -321,25 +419,18 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
             </div>
           ))}
         </div>
-
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '8px' }}>DESCRIPTION</p>
-          <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>
-            {task.description || 'No description provided.'}
-          </p>
+          <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>{task.description || 'No description provided.'}</p>
         </div>
-
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>
             ATTACHMENTS {detailFiles.length > 0 && `(${detailFiles.length})`}
           </p>
           <AttachmentZone files={detailFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
-
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px' }}>
-          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>
-            COMMENTS ({task.comments.length})
-          </p>
+          <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>COMMENTS ({task.comments.length})</p>
           {task.comments.map(c => (
             <div key={c.id} style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
               <Avatar name={c.author} size="sm" />
@@ -350,13 +441,8 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
             </div>
           ))}
           <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-            <input
-              value={comment}
-              onChange={e => setComment(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') submitComment(); }}
-              placeholder="Add a comment... (Enter to submit)"
-              style={{ flex: 1, background: '#222222', border: '1px solid #3A3A3A', borderRadius: '6px', padding: '8px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }}
-            />
+            <input value={comment} onChange={e => setComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submitComment(); }} placeholder="Add a comment... (Enter to submit)"
+              style={{ flex: 1, background: '#222222', border: '1px solid #3A3A3A', borderRadius: '6px', padding: '8px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
             <button onClick={submitComment} style={{ width: 36, height: 36, borderRadius: '6px', border: 'none', background: '#7B68EE', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -387,18 +473,8 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
   const [dueDate, setDueDate]     = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
 
-  const labelStyle: React.CSSProperties = {
-    fontSize: '11px', fontWeight: 600, color: '#888888',
-    textTransform: 'uppercase', letterSpacing: '0.06em',
-    display: 'block', marginBottom: '6px',
-  };
-
-  const selectStyle: React.CSSProperties = {
-    width: '100%', background: '#222222', border: '1px solid #3A3A3A',
-    borderRadius: '8px', padding: '9px 12px', color: '#F5F5F5',
-    fontSize: '13px', fontFamily: 'inherit', outline: 'none',
-    cursor: 'pointer', appearance: 'none',
-  };
+  const labelStyle: React.CSSProperties = { fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '6px' };
+  const selectStyle: React.CSSProperties = { width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '9px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', cursor: 'pointer', appearance: 'none' };
 
   const handleAddFiles = (newFiles: AttachedFile[]) => setAttachedFiles(prev => [...prev, ...newFiles]);
   const handleRemoveFile = (index: number) => {
@@ -412,18 +488,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
   const handleCreate = () => {
     if (!title.trim()) return;
     const validFiles = attachedFiles.filter(f => !f.error);
-    onCreate({
-      id: `t${Date.now()}`,
-      title: title.trim(),
-      description: description.trim(),
-      status,
-      priority,
-      subjectId: subjectId || undefined,
-      dueDate: dueDate || undefined,
-      assignee: assignee || undefined,
-      attachments: validFiles.map(f => ({ name: f.file.name, type: f.file.type })),
-      comments: [],
-    });
+    onCreate({ id: `t${Date.now()}`, title: title.trim(), description: description.trim(), status, priority, subjectId: subjectId || undefined, dueDate: dueDate || undefined, assignee: assignee || undefined, attachments: validFiles.map(f => ({ name: f.file.name, type: f.file.type })), comments: [] });
     onClose();
   };
 
@@ -432,13 +497,11 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
       <div style={{ padding: '20px 20px 0', overflowY: 'auto', maxHeight: '72vh', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label style={{ ...labelStyle }}>TITLE <span style={{ color: '#FF6B6B' }}>*</span></label>
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." autoFocus
-            style={{ width: '100%', background: '#222222', border: `1px solid ${!title.trim() ? '#3A3A3A' : '#7B68EE'}`, borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Task title..." autoFocus style={{ width: '100%', background: '#222222', border: `1px solid ${!title.trim() ? '#3A3A3A' : '#7B68EE'}`, borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div>
           <label style={labelStyle}>DESCRIPTION</label>
-          <textarea value={description} onChange={e => setDesc(e.target.value)} placeholder="Add context..." rows={3}
-            style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
+          <textarea value={description} onChange={e => setDesc(e.target.value)} placeholder="Add context..." rows={3} style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
@@ -477,9 +540,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
           </div>
         </div>
         <div>
-          <label style={labelStyle}>
-            ATTACHMENTS {attachedFiles.length > 0 && `(${attachedFiles.filter(f => !f.error).length} válido${attachedFiles.filter(f => !f.error).length !== 1 ? 's' : ''})`}
-          </label>
+          <label style={labelStyle}>ATTACHMENTS {attachedFiles.length > 0 && `(${attachedFiles.filter(f => !f.error).length} válido${attachedFiles.filter(f => !f.error).length !== 1 ? 's' : ''})`}</label>
           <AttachmentZone files={attachedFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
         <div>
@@ -487,9 +548,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
           <div style={{ display: 'flex', gap: '8px' }}>
             <input placeholder="Add a comment..." style={{ flex: 1, background: '#222222', border: '1px solid #3A3A3A', borderRadius: '6px', padding: '8px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none' }} />
             <button style={{ width: 36, height: 36, borderRadius: '6px', border: 'none', background: '#2A2A2A', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round">
-                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
         </div>
@@ -504,32 +563,21 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
 
 // ── add subject modal ────────────────────────────────────────────────────────
 
-function AddSubjectModal({ onClose, onCreate }: {
-  onClose: () => void;
-  onCreate: (subject: Subject) => void;
-}) {
+function AddSubjectModal({ onClose, onCreate }: { onClose: () => void; onCreate: (subject: Subject) => void }) {
   const [name, setName]   = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
-
-  const handleCreate = () => {
-    if (!name.trim()) return;
-    onCreate({ id: `s${Date.now()}`, name: name.trim(), color });
-  };
-
+  const handleCreate = () => { if (!name.trim()) return; onCreate({ id: `s${Date.now()}`, name: name.trim(), color }); };
   return (
     <Modal open onClose={onClose} title="New Subject" width={360}>
       <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Name</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Design, QA, DevOps..." autoFocus
-            style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Design, QA, DevOps..." autoFocus style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div>
           <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Color</label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {PRESET_COLORS.map(c => (
-              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />
-            ))}
+            {PRESET_COLORS.map(c => <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
@@ -547,32 +595,21 @@ function AddSubjectModal({ onClose, onCreate }: {
 
 // ── add field modal ──────────────────────────────────────────────────────────
 
-function AddFieldModal({ onClose, onCreate }: {
-  onClose: () => void;
-  onCreate: (field: { id: string; label: string; color: string }) => void;
-}) {
+function AddFieldModal({ onClose, onCreate }: { onClose: () => void; onCreate: (field: { id: string; label: string; color: string }) => void }) {
   const [name, setName]   = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
-
-  const handleCreate = () => {
-    if (!name.trim()) return;
-    onCreate({ id: name.trim().toLowerCase().replace(/\s+/g, '_'), label: name.trim(), color });
-  };
-
+  const handleCreate = () => { if (!name.trim()) return; onCreate({ id: name.trim().toLowerCase().replace(/\s+/g, '_'), label: name.trim(), color }); };
   return (
     <Modal open onClose={onClose} title="New Field" width={360}>
       <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div>
           <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Name</label>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. In Review, Blocked..." autoFocus
-            style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. In Review, Blocked..." autoFocus style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '10px 12px', color: '#F5F5F5', fontSize: '14px', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
         </div>
         <div>
           <label style={{ fontSize: '11px', fontWeight: 600, color: '#888888', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '8px' }}>Color</label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {PRESET_COLORS.map(c => (
-              <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />
-            ))}
+            {PRESET_COLORS.map(c => <button key={c} onClick={() => setColor(c)} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: color === c ? '3px solid #F5F5F5' : '3px solid transparent', cursor: 'pointer', padding: 0 }} />)}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
             <div style={{ width: 32, height: 3, borderRadius: 2, background: color }} />
@@ -595,9 +632,7 @@ const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 function sortTasks(tasks: Task[], sortBy: SortOption): Task[] {
   if (sortBy === 'none') return tasks;
   return [...tasks].sort((a, b) => {
-    if (sortBy === 'priority') {
-      return (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
-    }
+    if (sortBy === 'priority') return (PRIORITY_ORDER[a.priority] ?? 3) - (PRIORITY_ORDER[b.priority] ?? 3);
     if (sortBy === 'due_date') {
       if (!a.dueDate && !b.dueDate) return 0;
       if (!a.dueDate) return 1;
@@ -638,6 +673,7 @@ export default function KanbanBoard() {
   const [filterOpen, setFilterOpen]         = useState(false);
   const [sortBy, setSortBy]                 = useState<SortOption>('none');
   const [sortOpen, setSortOpen]             = useState(false);
+  const [membersOpen, setMembersOpen]       = useState(false);
   const [filters, setFilters]               = useState<Filters>({ priority: [], assignee: [], subjectId: [] });
 
   useEffect(() => {
@@ -648,10 +684,7 @@ export default function KanbanBoard() {
   const activeFilterCount = filters.priority.length + filters.assignee.length + filters.subjectId.length;
 
   const SORT_LABELS: Record<SortOption, string> = {
-    none: 'Sort by',
-    due_date: 'Due date',
-    priority: 'Priority',
-    created: 'Created date',
+    none: 'Sort by', due_date: 'Due date', priority: 'Priority', created: 'Created date',
   };
 
   const filteredTasks = tasks
@@ -670,15 +703,8 @@ export default function KanbanBoard() {
   };
 
   const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
-
-  const handleUpdate = (updated: Task) => {
-    setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
-    setSelectedTask(updated);
-  };
-
-  const removeFilter = (key: keyof Filters, val: string) => {
-    setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
-  };
+  const handleUpdate = (updated: Task) => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setSelectedTask(updated); };
+  const removeFilter = (key: keyof Filters, val: string) => setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
 
   return (
     <>
@@ -688,30 +714,18 @@ export default function KanbanBoard() {
         {/* workspace header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
-            <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>
-              {workspace?.name ?? workspaceId ?? 'Workspace'}
-            </h1>
-            <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>
-              {tasks.length} task{tasks.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}
-            </p>
+            <h1 style={{ color: '#F5F5F5', fontSize: '16px', fontWeight: 700 }}>{workspace?.name ?? workspaceId ?? 'Workspace'}</h1>
+            <p style={{ color: '#888888', fontSize: '12px', marginTop: '2px' }}>{tasks.length} task{tasks.length !== 1 ? 's' : ''} · {subjects.length} subject{subjects.length !== 1 ? 's' : ''}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search tasks..."
-              style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '6px', padding: '7px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', width: '200px' }}
-            />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tasks..."
+              style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '6px', padding: '7px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', width: '200px' }} />
 
             {/* filter */}
             <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => { setFilterOpen(o => !o); setSortOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${filterOpen || activeFilterCount > 0 ? '#7B68EE' : '#2A2A2A'}`, background: filterOpen ? '#7B68EE22' : activeFilterCount > 0 ? '#7B68EE11' : 'transparent', color: activeFilterCount > 0 ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-                </svg>
+              <button onClick={() => { setFilterOpen(o => !o); setSortOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${filterOpen || activeFilterCount > 0 ? '#7B68EE' : '#2A2A2A'}`, background: filterOpen ? '#7B68EE22' : activeFilterCount > 0 ? '#7B68EE11' : 'transparent', color: activeFilterCount > 0 ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </button>
               {filterOpen && <FilterPanel filters={filters} subjects={subjects} onApply={setFilters} onClose={() => setFilterOpen(false)} />}
@@ -719,28 +733,22 @@ export default function KanbanBoard() {
 
             {/* sort */}
             <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => { setSortOpen(o => !o); setFilterOpen(false); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${sortOpen || sortBy !== 'none' ? '#7B68EE' : '#2A2A2A'}`, background: sortOpen ? '#7B68EE22' : sortBy !== 'none' ? '#7B68EE11' : 'transparent', color: sortBy !== 'none' ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
-              >
+              <button onClick={() => { setSortOpen(o => !o); setFilterOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: `1px solid ${sortOpen || sortBy !== 'none' ? '#7B68EE' : '#2A2A2A'}`, background: sortOpen ? '#7B68EE22' : sortBy !== 'none' ? '#7B68EE11' : 'transparent', color: sortBy !== 'none' ? '#7B68EE' : '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/>
                 </svg>
                 {SORT_LABELS[sortBy]}
               </button>
-
               {sortOpen && (
                 <>
                   <div onClick={() => setSortOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
                   <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 180, background: '#1A1A1A', border: '1px solid #3A3A3A', borderRadius: 10, zIndex: 50, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
                     {(['none', 'due_date', 'priority', 'created'] as SortOption[]).map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => { setSortBy(opt); setSortOpen(false); }}
+                      <button key={opt} onClick={() => { setSortBy(opt); setSortOpen(false); }}
                         style={{ width: '100%', padding: '10px 14px', background: sortBy === opt ? '#7B68EE22' : 'transparent', border: 'none', color: sortBy === opt ? '#7B68EE' : '#CCC', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontFamily: 'inherit', textAlign: 'left' }}
                         onMouseEnter={e => { if (sortBy !== opt) e.currentTarget.style.background = '#222'; }}
-                        onMouseLeave={e => { if (sortBy !== opt) e.currentTarget.style.background = 'transparent'; }}
-                      >
+                        onMouseLeave={e => { if (sortBy !== opt) e.currentTarget.style.background = 'transparent'; }}>
                         {SORT_LABELS[opt]}
                         {sortBy === opt && <span style={{ fontSize: 12 }}>✓</span>}
                       </button>
@@ -750,7 +758,22 @@ export default function KanbanBoard() {
               )}
             </div>
 
-            <Button variant="ghost" size="sm">Members</Button>
+            {/* members button — agora funciona */}
+            <button
+              onClick={() => setMembersOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 7, border: '1px solid #2A2A2A', background: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCC'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#888'; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+              Members
+            </button>
+
             <Button size="sm" onClick={() => setCreateStatus('todo')}>+ New Task</Button>
           </div>
         </div>
@@ -761,79 +784,47 @@ export default function KanbanBoard() {
             <span style={{ color: '#555', fontSize: 11, marginRight: 2 }}>Filtered by:</span>
             {filters.priority.map(p => (
               <span key={p} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, background: '#2A2A2A', border: '1px solid #3A3A3A', fontSize: 11, color: '#CCC' }}>
-                {p}
-                <button onClick={() => removeFilter('priority', p)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 12 }}>✕</button>
+                {p}<button onClick={() => removeFilter('priority', p)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 12 }}>✕</button>
               </span>
             ))}
             {filters.assignee.map(a => (
               <span key={a} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, background: '#2A2A2A', border: '1px solid #3A3A3A', fontSize: 11, color: '#CCC' }}>
-                @{a}
-                <button onClick={() => removeFilter('assignee', a)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 12 }}>✕</button>
+                @{a}<button onClick={() => removeFilter('assignee', a)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 12 }}>✕</button>
               </span>
             ))}
             {filters.subjectId.map(sid => {
               const s = subjects.find(s => s.id === sid);
               return s ? (
                 <span key={sid} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 12, background: '#2A2A2A', border: `1px solid ${s.color}44`, fontSize: 11, color: '#CCC' }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />
-                  {s.name}
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.color }} />{s.name}
                   <button onClick={() => removeFilter('subjectId', sid)} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 12 }}>✕</button>
                 </span>
               ) : null;
             })}
-            <button onClick={() => setFilters({ priority: [], assignee: [], subjectId: [] })} style={{ marginLeft: 4, color: '#7B68EE', fontSize: 11, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Clear all
-            </button>
+            <button onClick={() => setFilters({ priority: [], assignee: [], subjectId: [] })} style={{ marginLeft: 4, color: '#7B68EE', fontSize: 11, border: 'none', background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}>Clear all</button>
           </div>
         )}
 
         {/* subject tabs */}
         <div style={{ padding: '0 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-          <button onClick={() => setActiveSubject(null)}
-            style={{ padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`, color: activeSubject === null ? '#F5F5F5' : '#888888', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-            All
-          </button>
+          <button onClick={() => setActiveSubject(null)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === null ? '#7B68EE' : 'transparent'}`, color: activeSubject === null ? '#F5F5F5' : '#888888', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>All</button>
           {subjects.map(s => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center' }}>
-              <button onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)}
-                style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />
-                {s.name}
+              <button onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)} style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />{s.name}
               </button>
-              <button onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }}
-                style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>
-                ✕
-              </button>
+              <button onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }} style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>✕</button>
             </div>
           ))}
-          <button onClick={() => setShowAddSubject(true)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
-            + Add Subject
-          </button>
-          <button onClick={() => setShowAddField(true)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>
-            + Add Field
-          </button>
+          <button onClick={() => setShowAddSubject(true)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>+ Add Subject</button>
+          <button onClick={() => setShowAddField(true)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>+ Add Field</button>
         </div>
 
         {/* columns */}
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
             {fields.map(f => (
-              <KanbanColumn
-                key={f.id}
-                fieldId={f.id}
-                label={f.label}
-                color={f.color}
-                tasks={visibleTasks.filter(t => t.status === f.id)}
-                subjects={subjects}
-                draggingId={draggingId}
-                onDragStart={setDraggingId}
-                onDragEnd={() => setDraggingId(null)}
-                onDrop={handleDrop}
-                onTaskClick={setSelectedTask}
-                onAddTask={setCreateStatus}
-                onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))}
-                onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))}
-              />
+              <KanbanColumn key={f.id} fieldId={f.id} label={f.label} color={f.color} tasks={visibleTasks.filter(t => t.status === f.id)} subjects={subjects} draggingId={draggingId} onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)} onDrop={handleDrop} onTaskClick={setSelectedTask} onAddTask={setCreateStatus} onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))} onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))} />
             ))}
           </div>
         </div>
@@ -846,6 +837,7 @@ export default function KanbanBoard() {
 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} currentUserId={user?.id || '1'} />
+      <MembersPanel open={membersOpen} onClose={() => setMembersOpen(false)} workspaceName={workspace?.name ?? 'Workspace'} />
     </>
   );
 }
