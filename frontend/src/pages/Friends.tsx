@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
 
@@ -14,6 +13,16 @@ interface Friend {
   addedAt: string;
 }
 
+interface FriendRequest {
+  id: string;
+  username: string;
+  fullName: string;
+  avatarUrl: string | null;
+  sentAt: string;
+}
+
+type Tab = 'friends' | 'pending' | 'sent';
+
 // ── mock data ─────────────────────────────────────────────────────────────────
 
 const MOCK_FRIENDS: Friend[] = [
@@ -22,21 +31,24 @@ const MOCK_FRIENDS: Friend[] = [
   { id: 'u3', username: 'murilo_db',  fullName: 'Murilo',  avatarUrl: null, online: false, addedAt: 'Mar 14' },
 ];
 
-// ── avatar com iniciais ───────────────────────────────────────────────────────
+const MOCK_RECEIVED: FriendRequest[] = [
+  { id: 'r1', username: 'joao_42',    fullName: 'João',    avatarUrl: null, sentAt: '2h ago'      },
+  { id: 'r2', username: 'carla_dev',  fullName: 'Carla',   avatarUrl: null, sentAt: 'Yesterday'   },
+];
+
+const MOCK_SENT: FriendRequest[] = [
+  { id: 's1', username: 'pedro_ui',   fullName: 'Pedro',   avatarUrl: null, sentAt: '1d ago'      },
+];
+
+// ── avatar ────────────────────────────────────────────────────────────────────
 
 function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
   const initials = name.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   return (
     <div style={{
-      width: size,
-      height: size,
-      borderRadius: '50%',
-      background: '#2A2A2A',
-      border: '1px solid #3A3A3A',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
+      width: size, height: size, borderRadius: '50%',
+      background: '#2A2A2A', border: '1px solid #3A3A3A',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
     }}>
       <span style={{ color: '#CCCCCC', fontSize: size * 0.32, fontWeight: 600 }}>{initials}</span>
     </div>
@@ -46,59 +58,107 @@ function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
 // ── componente principal ──────────────────────────────────────────────────────
 
 export default function Friends() {
-  const navigate = useNavigate();
-  const [friends, setFriends]         = useState<Friend[]>(MOCK_FRIENDS);
-  const [search, setSearch]           = useState('');
-  const [addInput, setAddInput]       = useState('');
-  const [addError, setAddError]       = useState('');
-  const [addSuccess, setAddSuccess]   = useState('');
-  const [profileOpen, setProfileOpen] = useState(false);
+  const [tab, setTab]                   = useState<Tab>('friends');
+  const [friends, setFriends]           = useState<Friend[]>(MOCK_FRIENDS);
+  const [received, setReceived]         = useState<FriendRequest[]>(MOCK_RECEIVED);
+  const [sent, setSent]                 = useState<FriendRequest[]>(MOCK_SENT);
+  const [search, setSearch]             = useState('');
+  const [addInput, setAddInput]         = useState('');
+  const [addError, setAddError]         = useState('');
+  const [addSuccess, setAddSuccess]     = useState('');
+  const [profileOpen, setProfileOpen]   = useState(false);
 
-  const filtered = friends.filter(f =>
+  const onlineCount   = friends.filter(f => f.online).length;
+  const pendingCount  = received.length;
+
+  const filteredFriends = friends.filter(f =>
     f.username.toLowerCase().includes(search.toLowerCase()) ||
     f.fullName.toLowerCase().includes(search.toLowerCase())
   );
 
+  // ── handlers ─────────────────────────────────────────────────────────────
+
   const handleAdd = () => {
     const username = addInput.trim().toLowerCase();
     if (!username) return;
-
     if (friends.some(f => f.username === username)) {
       setAddError('This user is already your friend.');
       setAddSuccess('');
       return;
     }
-
-    // mock: simula adição bem-sucedida
-    // TODO: substituir por POST /api/friends { username }
-    const newFriend: Friend = {
-      id: `u${Date.now()}`,
+    if (sent.some(r => r.username === username)) {
+      setAddError('You already sent a request to this user.');
+      setAddSuccess('');
+      return;
+    }
+    // TODO: POST /api/friends/request { username }
+    setSent(prev => [...prev, {
+      id: `s${Date.now()}`,
       username,
       fullName: username,
       avatarUrl: null,
-      online: false,
-      addedAt: 'Just now',
-    };
-    setFriends(prev => [...prev, newFriend]);
+      sentAt: 'Just now',
+    }]);
     setAddInput('');
     setAddError('');
-    setAddSuccess(`@${username} added as a friend.`);
+    setAddSuccess(`Friend request sent to @${username}.`);
     setTimeout(() => setAddSuccess(''), 3000);
   };
 
-  const handleRemove = (id: string) => {
+  const handleRemoveFriend = (id: string) => {
+    // TODO: DELETE /api/friends/:id
     setFriends(prev => prev.filter(f => f.id !== id));
   };
 
-  const onlineCount = friends.filter(f => f.online).length;
+  const handleAccept = (req: FriendRequest) => {
+    // TODO: POST /api/friends/request/:id/accept
+    setReceived(prev => prev.filter(r => r.id !== req.id));
+    setFriends(prev => [...prev, {
+      id: req.id,
+      username: req.username,
+      fullName: req.fullName,
+      avatarUrl: req.avatarUrl,
+      online: false,
+      addedAt: 'Just now',
+    }]);
+  };
+
+  const handleDecline = (id: string) => {
+    // TODO: POST /api/friends/request/:id/decline
+    setReceived(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleCancelRequest = (id: string) => {
+    // TODO: DELETE /api/friends/request/:id
+    setSent(prev => prev.filter(r => r.id !== id));
+  };
+
+  // ── estilos compartilhados ────────────────────────────────────────────────
+
+  const cardStyle = {
+    background: '#1A1A1A',
+    border: '1px solid #2A2A2A',
+    borderRadius: 10,
+    padding: '14px 16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+  } as const;
+
+  const btnBase = {
+    padding: '6px 12px',
+    borderRadius: 6,
+    border: '1px solid #3A3A3A',
+    background: 'transparent',
+    fontSize: 12,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  } as const;
 
   return (
     <div style={{
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#111111',
-      overflow: 'hidden',
+      height: '100vh', display: 'flex', flexDirection: 'column',
+      background: '#111111', overflow: 'hidden',
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
       <Navbar onOpenProfile={() => setProfileOpen(true)} />
@@ -106,7 +166,7 @@ export default function Friends() {
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: 680, width: '100%', margin: '0 auto' }}>
 
         {/* header */}
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 24 }}>
           <h1 style={{ color: '#EEEEEE', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Friends</h1>
           <p style={{ color: '#666', fontSize: 13 }}>
             {friends.length} friends · {onlineCount} online
@@ -114,13 +174,7 @@ export default function Friends() {
         </div>
 
         {/* add friend */}
-        <div style={{
-          background: '#1A1A1A',
-          border: '1px solid #2A2A2A',
-          borderRadius: 12,
-          padding: '18px 20px',
-          marginBottom: 24,
-        }}>
+        <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 12, padding: '18px 20px', marginBottom: 24 }}>
           <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add a friend</p>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -128,147 +182,170 @@ export default function Friends() {
               onChange={e => { setAddInput(e.target.value); setAddError(''); }}
               onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
               placeholder="Enter username..."
-              style={{
-                flex: 1,
-                background: '#222222',
-                border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`,
-                borderRadius: 8,
-                padding: '9px 12px',
-                color: '#EEEEEE',
-                fontSize: 13,
-                fontFamily: 'inherit',
-                outline: 'none',
-              }}
+              style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '9px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
             />
             <button
               onClick={handleAdd}
               disabled={!addInput.trim()}
-              style={{
-                padding: '9px 18px',
-                borderRadius: 8,
-                border: 'none',
-                background: addInput.trim() ? '#7B68EE' : '#2A2A2A',
-                color: addInput.trim() ? '#FFFFFF' : '#555',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: addInput.trim() ? 'pointer' : 'not-allowed',
-                transition: 'background 0.15s',
-                flexShrink: 0,
-              }}
+              style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#FFFFFF' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0 }}
             >
-              Add
+              Send Request
             </button>
           </div>
-          {addError && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 8 }}>{addError}</p>}
+          {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 8 }}>{addError}</p>}
           {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 8 }}>{addSuccess}</p>}
         </div>
 
-        {/* search */}
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search friends..."
-          style={{
-            width: '100%',
-            background: '#1A1A1A',
-            border: '1px solid #2A2A2A',
-            borderRadius: 8,
-            padding: '9px 14px',
-            color: '#EEEEEE',
-            fontSize: 13,
-            fontFamily: 'inherit',
-            outline: 'none',
-            boxSizing: 'border-box',
-            marginBottom: 16,
-          }}
-        />
-
-        {/* lista */}
-        {filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: '#444' }}>
-            <p style={{ fontSize: 14 }}>No friends found.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {filtered.map(friend => (
-              <div
-                key={friend.id}
-                style={{
-                  background: '#1A1A1A',
-                  border: '1px solid #2A2A2A',
-                  borderRadius: 10,
-                  padding: '14px 16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                }}
-              >
-                {/* avatar + status */}
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <UserAvatar name={friend.username} size={40} />
-                  <span style={{
-                    position: 'absolute',
-                    bottom: 1,
-                    right: 1,
-                    width: 10,
-                    height: 10,
-                    borderRadius: '50%',
-                    background: friend.online ? '#50C878' : '#444',
-                    border: '2px solid #1A1A1A',
-                  }} />
-                </div>
-
-                {/* info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{friend.fullName}</p>
-                  <p style={{ color: '#666', fontSize: 12 }}>@{friend.username} · added {friend.addedAt}</p>
-                </div>
-
-                {/* status badge */}
+        {/* tabs */}
+        <div style={{ display: 'flex', borderBottom: '1px solid #2A2A2A', marginBottom: 20 }}>
+          {([
+            { id: 'friends', label: `Friends (${friends.length})` },
+            { id: 'pending', label: `Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
+            { id: 'sent',    label: `Sent (${sent.length})` },
+          ] as { id: Tab; label: string }[]).map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setTab(t.id); setSearch(''); }}
+              style={{
+                padding: '10px 16px', background: 'transparent', border: 'none',
+                borderBottom: `2px solid ${tab === t.id ? '#7B68EE' : 'transparent'}`,
+                color: tab === t.id ? '#F5F5F5' : '#666',
+                fontSize: 13, fontWeight: tab === t.id ? 600 : 400,
+                cursor: 'pointer', transition: 'color 0.15s',
+                position: 'relative',
+              }}
+            >
+              {t.label}
+              {t.id === 'pending' && pendingCount > 0 && (
                 <span style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: friend.online ? '#50C878' : '#555',
-                  flexShrink: 0,
-                }}>
-                  {friend.online ? 'Online' : 'Offline'}
-                </span>
+                  position: 'absolute', top: 6, right: 4,
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: '#7B68EE',
+                }} />
+              )}
+            </button>
+          ))}
+        </div>
 
-                {/* ações */}
+        {/* ── aba friends ── */}
+        {tab === 'friends' && (
+          <>
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search friends..."
+              style={{ width: '100%', background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 8, padding: '9px 14px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', marginBottom: 16 }}
+            />
+            {filteredFriends.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#444' }}>
+                <p style={{ fontSize: 14 }}>No friends found.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {filteredFriends.map(friend => (
+                  <div key={friend.id} style={cardStyle}>
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <UserAvatar name={friend.username} size={40} />
+                      <span style={{ position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: '50%', background: friend.online ? '#50C878' : '#444', border: '2px solid #1A1A1A' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{friend.fullName}</p>
+                      <p style={{ color: '#666', fontSize: 12 }}>@{friend.username} · added {friend.addedAt}</p>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: friend.online ? '#50C878' : '#555', flexShrink: 0 }}>
+                      {friend.online ? 'Online' : 'Offline'}
+                    </span>
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      <button
+                        style={{ ...btnBase, color: '#CCCCCC' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#555'; e.currentTarget.style.color = '#FFF'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCCCCC'; }}
+                      >
+                        Message
+                      </button>
+                      <button
+                        onClick={() => handleRemoveFriend(friend.id)}
+                        style={{ ...btnBase, color: '#FF6B6B', borderColor: '#3A3A3A' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#2A1010'; e.currentTarget.style.borderColor = '#FF6B6B44'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#3A3A3A'; }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── aba pending ── */}
+        {tab === 'pending' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {received.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#444' }}>
+                <p style={{ fontSize: 14 }}>No pending requests.</p>
+              </div>
+            ) : received.map(req => (
+              <div key={req.id} style={cardStyle}>
+                <UserAvatar name={req.username} size={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{req.fullName}</p>
+                  <p style={{ color: '#666', fontSize: 12 }}>@{req.username} · {req.sentAt}</p>
+                </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button
-                    onClick={() => navigate('/dashboard')}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 6,
-                      border: '1px solid #3A3A3A',
-                      background: 'transparent',
-                      color: '#CCCCCC',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                    }}
+                    onClick={() => handleAccept(req)}
+                    style={{ ...btnBase, background: '#7B68EE', border: 'none', color: '#fff', fontWeight: 600 }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#6A58DE')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#7B68EE')}
                   >
-                    Message
+                    Accept
                   </button>
                   <button
-                    onClick={() => handleRemove(friend.id)}
-                    style={{
-                      padding: '6px 12px',
-                      borderRadius: 6,
-                      border: '1px solid #3A3A3A',
-                      background: 'transparent',
-                      color: '#FF6B6B',
-                      fontSize: 12,
-                      cursor: 'pointer',
-                    }}
+                    onClick={() => handleDecline(req.id)}
+                    style={{ ...btnBase, color: '#888' }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#FF6B6B'; e.currentTarget.style.borderColor = '#FF6B6B44'; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#3A3A3A'; }}
                   >
-                    Remove
+                    Decline
                   </button>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        {/* ── aba sent ── */}
+        {tab === 'sent' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {sent.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0', color: '#444' }}>
+                <p style={{ fontSize: 14 }}>No sent requests.</p>
+              </div>
+            ) : sent.map(req => (
+              <div key={req.id} style={cardStyle}>
+                <UserAvatar name={req.username} size={40} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{req.fullName}</p>
+                  <p style={{ color: '#666', fontSize: 12 }}>@{req.username} · sent {req.sentAt}</p>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#555', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Pending
+                </span>
+                <button
+                  onClick={() => handleCancelRequest(req.id)}
+                  style={{ ...btnBase, color: '#888', flexShrink: 0 }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#FF6B6B'; e.currentTarget.style.borderColor = '#FF6B6B44'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#888'; e.currentTarget.style.borderColor = '#3A3A3A'; }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
       </div>
 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
