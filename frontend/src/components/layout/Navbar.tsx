@@ -79,7 +79,15 @@ function NotificationDropdown({ notifications, onMarkAllRead, onMarkOneRead, onC
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [filter, setFilter] = useState<'all' | 'task' | 'comment' | 'mention' | 'member'>('all');
+
   const hasUnread = notifications.some(n => !n.read);
+
+  const filtered = filter === 'all'
+    ? notifications
+    : notifications.filter(n => n.type === filter);
+
+  const unreadInFilter = filtered.filter(n => !n.read).length;
 
   useEffect(() => {
     const handle = (e: MouseEvent) => {
@@ -89,19 +97,22 @@ function NotificationDropdown({ notifications, onMarkAllRead, onMarkOneRead, onC
     return () => { clearTimeout(id); document.removeEventListener('mousedown', handle); };
   }, [onClose]);
 
+  const filterTabs: { id: typeof filter; label: string }[] = [
+    { id: 'all',     label: 'All'      },
+    { id: 'task',    label: 'Tasks'    },
+    { id: 'comment', label: 'Comments' },
+    { id: 'mention', label: 'Mentions' },
+    { id: 'member',  label: 'Members'  },
+  ];
+
   return (
     <div ref={ref} style={{
-      position: 'absolute',
-      top: 'calc(100% + 8px)',
-      right: 0,
-      width: 380,
-      background: T.surface,
-      border: `1px solid ${T.borderLight}`,
-      borderRadius: 10,
-      zIndex: 200,
-      overflow: 'hidden',
+      position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+      width: 380, background: T.surface, border: `1px solid ${T.borderLight}`,
+      borderRadius: 10, zIndex: 200, overflow: 'hidden',
       boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
     }}>
+
       {/* header */}
       <div style={{ padding: '12px 16px', background: T.elevated, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ color: T.bright, fontSize: 14, fontWeight: 600 }}>Notifications</span>
@@ -114,43 +125,74 @@ function NotificationDropdown({ notifications, onMarkAllRead, onMarkOneRead, onC
         </button>
       </div>
 
-      {/* list */}
-      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-        {notifications.map((n, i) => (
-          <div
-            key={n.id}
-            onClick={() => onMarkOneRead(n.id)}
+      {/* filter tabs */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${T.border}`, background: T.elevated, overflowX: 'auto' }}>
+        {filterTabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => setFilter(t.id)}
             style={{
-              display: 'flex', alignItems: 'flex-start', gap: 12,
-              padding: '12px 16px',
-              background: n.read ? T.surface : T.elevated,
-              borderBottom: i < notifications.length - 1 ? `1px solid ${T.border}` : 'none',
-              borderLeft: n.read ? '3px solid transparent' : `3px solid ${T.primary}`,
-              cursor: 'pointer',
-              transition: 'background 0.1s',
+              padding: '8px 12px', background: 'transparent', border: 'none',
+              borderBottom: `2px solid ${filter === t.id ? T.primary : 'transparent'}`,
+              color: filter === t.id ? T.bright : T.dim,
+              fontSize: 12, fontWeight: filter === t.id ? 600 : 400,
+              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit',
+              transition: 'color 0.1s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = T.elevated)}
-            onMouseLeave={e => (e.currentTarget.style.background = n.read ? T.surface : T.elevated)}
           >
-            <NotifIcon type={n.type} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ color: T.bright, fontSize: 13, fontWeight: n.read ? 400 : 600, marginBottom: 2 }}>{n.title}</p>
-              <p style={{ color: T.text, fontSize: 12, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</p>
-              <p style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>{n.time}</p>
-            </div>
-            {!n.read && (
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.primary, flexShrink: 0, marginTop: 4 }} />
-            )}
-          </div>
+            {t.label}
+          </button>
         ))}
+      </div>
+
+      {/* list */}
+      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '36px 16px', textAlign: 'center' }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: T.elevated, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <IconBell />
+            </div>
+            <p style={{ color: T.dim, fontSize: 13 }}>
+              {filter === 'all' ? 'No notifications yet.' : `No ${filter} notifications.`}
+            </p>
+          </div>
+        ) : (
+          filtered.map((n, i) => (
+            <div
+              key={n.id}
+              onClick={() => onMarkOneRead(n.id)}
+              style={{
+                display: 'flex', alignItems: 'flex-start', gap: 12,
+                padding: '12px 16px',
+                background: n.read ? T.surface : T.elevated,
+                borderBottom: i < filtered.length - 1 ? `1px solid ${T.border}` : 'none',
+                borderLeft: n.read ? '3px solid transparent' : `3px solid ${T.primary}`,
+                cursor: 'pointer', transition: 'background 0.1s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = T.elevated)}
+              onMouseLeave={e => (e.currentTarget.style.background = n.read ? T.surface : T.elevated)}
+            >
+              <NotifIcon type={n.type} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: T.bright, fontSize: 13, fontWeight: n.read ? 400 : 600, marginBottom: 2 }}>{n.title}</p>
+                <p style={{ color: T.text, fontSize: 12, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</p>
+                <p style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>{n.time}</p>
+              </div>
+              {!n.read && (
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: T.primary, flexShrink: 0, marginTop: 4 }} />
+              )}
+            </div>
+          ))
+        )}
       </div>
 
       {/* footer */}
       <div style={{ padding: '10px 16px', borderTop: `1px solid ${T.border}`, textAlign: 'center' }}>
         <span style={{ color: T.dim, fontSize: 12 }}>
-          {notifications.filter(n => !n.read).length} unread
+          {unreadInFilter > 0 ? `${unreadInFilter} unread` : 'All caught up'}
         </span>
       </div>
+
     </div>
   );
 }
