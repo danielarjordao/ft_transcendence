@@ -19,17 +19,13 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       accessToken: localStorage.getItem('accessToken'),
       isLoading: false,
-
       setUser: (user) => set({ user }),
       setToken: (token) => set({ accessToken: token }),
       setLoading: (isLoading) => set({ isLoading }),
-
       login: (token, user) => {
-        // salva nas duas chaves: Zustand usa 'fazelo-auth', SocketContext usa 'accessToken'
         localStorage.setItem('accessToken', token);
         set({ accessToken: token, user });
       },
-
       logout: () => {
         localStorage.removeItem('accessToken');
         set({ accessToken: null, user: null });
@@ -42,7 +38,6 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
       }),
       onRehydrateStorage: () => (state) => {
-        // quando o Zustand reidrata, sincroniza o accessToken no localStorage
         if (state?.accessToken) {
           localStorage.setItem('accessToken', state.accessToken);
         }
