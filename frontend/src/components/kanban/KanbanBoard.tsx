@@ -307,9 +307,52 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
   onClose: () => void;
   onUpdate: (t: Task) => void;
 }) {
-  const [comment, setComment] = useState('');
-  const [detailFiles, setDetailFiles] = useState<AttachedFile[]>([]);
+  const [comment, setComment]             = useState('');
+  const [detailFiles, setDetailFiles]     = useState<AttachedFile[]>([]);
+  const [isEditing, setIsEditing]         = useState(false);
+  const [draftTitle, setDraftTitle]       = useState(task.title);
+  const [draftDescription, setDraftDesc] = useState(task.description ?? '');
+  const [draftAssignee, setDraftAssignee] = useState(task.assignee ?? '');
+  const [draftPriority, setDraftPriority] = useState<Task['priority']>(task.priority);
+  const [draftDueDate, setDraftDueDate]   = useState(task.dueDate ?? '');
+
   const subject = subjects.find(s => s.id === task.subjectId);
+
+  const fieldStyle: React.CSSProperties = {
+    width: '100%', background: '#222222', border: '1px solid #3A3A3A',
+    borderRadius: '8px', padding: '9px 12px', color: '#F5F5F5',
+    fontSize: '13px', fontFamily: 'inherit', outline: 'none',
+    cursor: 'pointer', appearance: 'none', boxSizing: 'border-box',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    fontSize: '10px', fontWeight: 600, color: '#888888',
+    textTransform: 'uppercase', letterSpacing: '0.06em',
+    display: 'block', marginBottom: '6px',
+  };
+
+  const handleEdit = () => {
+    setDraftTitle(task.title);
+    setDraftDesc(task.description ?? '');
+    setDraftAssignee(task.assignee ?? '');
+    setDraftPriority(task.priority);
+    setDraftDueDate(task.dueDate ?? '');
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    onUpdate({
+      ...task,
+      title:       draftTitle.trim() || task.title,
+      description: draftDescription.trim(),
+      assignee:    draftAssignee || undefined,
+      priority:    draftPriority,
+      dueDate:     draftDueDate || undefined,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => setIsEditing(false);
 
   const submitComment = () => {
     if (!comment.trim()) return;
@@ -317,7 +360,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
     setComment('');
   };
 
-  const handleAddFiles = (newFiles: AttachedFile[]) => setDetailFiles(prev => [...prev, ...newFiles]);
+  const handleAddFiles   = (newFiles: AttachedFile[]) => setDetailFiles(prev => [...prev, ...newFiles]);
   const handleRemoveFile = (index: number) => {
     setDetailFiles(prev => {
       const f = prev[index];
@@ -328,36 +371,110 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
 
   return (
     <Modal open onClose={onClose} width={580}>
+
+      {/* header */}
       <div style={{ padding: '14px 18px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {subject && <span style={{ width: 9, height: 9, borderRadius: '50%', background: subject.color, flexShrink: 0 }} />}
           <span style={{ color: '#888888', fontSize: '12px' }}>{subject?.name}</span>
         </div>
-        <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px' }}>✕</button>
-      </div>
-      <div style={{ padding: '20px 18px', overflowY: 'auto', maxHeight: '70vh' }}>
-        <h2 style={{ color: '#F5F5F5', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>{task.title}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: '#2A2A2A', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
-          {[
-            { label: 'PRIORITY', value: <Badge variant={task.priority} /> },
-            { label: 'STATUS',   value: <Badge variant={task.status} /> },
-            { label: 'ASSIGNEE', value: task.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Avatar name={task.assignee} size="sm" /><span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.assignee}</span></div> : <span style={{ color: '#888888', fontSize: '13px' }}>Unassigned</span> },
-            { label: 'DUE DATE', value: <span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.dueDate ?? 'No date'}</span> },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: '#1A1A1A', padding: '12px 14px' }}>
-              <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</p>
-              {value}
-            </div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {!isEditing && (
+            <button
+              onClick={handleEdit}
+              style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #3A3A3A', background: 'transparent', color: '#888888', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#7B68EE'; e.currentTarget.style.color = '#7B68EE'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#888888'; }}
+            >
+              Edit
+            </button>
+          )}
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', fontSize: '18px' }}>✕</button>
         </div>
+      </div>
+
+      {/* body */}
+      <div style={{ padding: '20px 18px', overflowY: 'auto', maxHeight: '70vh' }}>
+
+        {/* title */}
+        {isEditing ? (
+          <input
+            value={draftTitle}
+            onChange={e => setDraftTitle(e.target.value)}
+            style={{ ...fieldStyle, fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}
+          />
+        ) : (
+          <h2 style={{ color: '#F5F5F5', fontSize: '18px', fontWeight: 700, marginBottom: '20px' }}>{task.title}</h2>
+        )}
+
+        {/* metadata */}
+        {isEditing ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={labelStyle}>PRIORITY</label>
+              <select value={draftPriority} onChange={e => setDraftPriority(e.target.value as Task['priority'])} style={fieldStyle}>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>STATUS</label>
+              <div style={{ padding: '9px 12px', background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px' }}>
+                <Badge variant={task.status} />
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>ASSIGNEE</label>
+              <select value={draftAssignee} onChange={e => setDraftAssignee(e.target.value)} style={fieldStyle}>
+                <option value="">Unassigned</option>
+                {MOCK_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={labelStyle}>DUE DATE</label>
+              <input type="date" value={draftDueDate} onChange={e => setDraftDueDate(e.target.value)} style={{ ...fieldStyle, colorScheme: 'dark' }} />
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1px', background: '#2A2A2A', borderRadius: '8px', overflow: 'hidden', marginBottom: '16px' }}>
+            {[
+              { label: 'PRIORITY', value: <Badge variant={task.priority} /> },
+              { label: 'STATUS',   value: <Badge variant={task.status} /> },
+              { label: 'ASSIGNEE', value: task.assignee ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Avatar name={task.assignee} size="sm" /><span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.assignee}</span></div> : <span style={{ color: '#888888', fontSize: '13px' }}>Unassigned</span> },
+              { label: 'DUE DATE', value: <span style={{ color: '#F5F5F5', fontSize: '13px' }}>{task.dueDate ?? 'No date'}</span> },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: '#1A1A1A', padding: '12px 14px' }}>
+                <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '6px' }}>{label}</p>
+                {value}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* description */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '8px' }}>DESCRIPTION</p>
-          <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>{task.description || 'No description provided.'}</p>
+          {isEditing ? (
+            <textarea
+              value={draftDescription}
+              onChange={e => setDraftDesc(e.target.value)}
+              rows={4}
+              placeholder="Add context..."
+              style={{ width: '100%', background: '#222222', border: '1px solid #3A3A3A', borderRadius: '8px', padding: '9px 12px', color: '#F5F5F5', fontSize: '13px', fontFamily: 'inherit', outline: 'none', resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
+            />
+          ) : (
+            <p style={{ color: task.description ? '#F5F5F5' : '#555555', fontSize: '13px', lineHeight: 1.6 }}>{task.description || 'No description provided.'}</p>
+          )}
         </div>
+
+        {/* attachments */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>ATTACHMENTS {detailFiles.length > 0 && `(${detailFiles.length})`}</p>
           <AttachmentZone files={detailFiles} onAdd={handleAddFiles} onRemove={handleRemoveFile} />
         </div>
+
+        {/* comments */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: '8px', padding: '12px 14px' }}>
           <p style={{ color: '#888888', fontSize: '10px', fontWeight: 600, letterSpacing: '0.06em', marginBottom: '10px' }}>COMMENTS ({task.comments.length})</p>
           {task.comments.map(c => (
@@ -380,6 +497,15 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate }: {
           </div>
         </div>
       </div>
+
+      {/* footer — só visível no modo de edição */}
+      {isEditing && (
+        <div style={{ padding: '14px 18px', borderTop: '1px solid #2A2A2A', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          <Button variant="ghost" onClick={handleCancel}>Cancel</Button>
+          <Button onClick={handleSave} disabled={!draftTitle.trim()}>Save</Button>
+        </div>
+      )}
+
     </Modal>
   );
 }
@@ -586,14 +712,14 @@ export default function KanbanBoard() {
   const board     = getBoard(workspaceId ?? '');
   const workspace = workspaces.find(w => w.id === workspaceId);
 
-  const [tasks, setTasks]                 = useState<Task[]>(board.tasks);
-  const [subjects, setSubjects]           = useState<Subject[]>(board.subjects);
-  const [fields, setFields]               = useState(board.fields);
-  const [draggingId, setDraggingId]       = useState<string | null>(null);
-  const [selectedTask, setSelectedTask]   = useState<Task | null>(null);
-  const [createStatus, setCreateStatus]   = useState<string | null>(null);
-  const [search, setSearch]               = useState('');
-  const [activeSubject, setActiveSubject] = useState<string | null>(null);
+  const [tasks, setTasks]                   = useState<Task[]>(board.tasks);
+  const [subjects, setSubjects]             = useState<Subject[]>(board.subjects);
+  const [fields, setFields]                 = useState(board.fields);
+  const [draggingId, setDraggingId]         = useState<string | null>(null);
+  const [selectedTask, setSelectedTask]     = useState<Task | null>(null);
+  const [createStatus, setCreateStatus]     = useState<string | null>(null);
+  const [search, setSearch]                 = useState('');
+  const [activeSubject, setActiveSubject]   = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showAddField, setShowAddField]     = useState(false);
   const [profileOpen, setProfileOpen]       = useState(false);
