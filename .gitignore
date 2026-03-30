@@ -5,3 +5,10 @@
 dist/
 .env
 .env.local
+
+.agents/
+.codex/
+.devcontainer/
+docker-compose-explicacao.md
+
+node_modules/

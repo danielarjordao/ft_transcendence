@@ -1,3 +1,6 @@
+<!-- TODO revisar documento ao final, pois está desatualizado -->
+<!-- Vamos usar o prisma7 que não precisa de RUN apk add --no-cache openssl` por exemplo  -->
+
 # Environment Setup & Initialization Guide
 
 This document details the exact steps and commands used to initialize the `ft_transcendence` monorepo. If you need to recreate the project, understand how the foundation was built, or set it up on a new machine, follow this guide.
