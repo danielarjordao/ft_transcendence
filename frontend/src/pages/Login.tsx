@@ -32,18 +32,25 @@ export default function Login() {
     setErrors(prev => ({ ...prev, [field]: e[field] }));
   };
 
-  const handleSubmit = async () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
     setIsLoading(true);
     setServerError('');
+
     try {
       const res = await authService.login({ email, password });
       login(res.accessToken, res.user);
       navigate('/dashboard');
     } catch (err: any) {
-      if (err.response?.status === 401) setServerError('Email or password is incorrect.');
-      else setServerError('Could not connect. Please try again.');
+      const msg = err.response?.data?.message;
+      setServerError(msg ?? 'Credenciais inválidas. Tenta novamente.');
     } finally {
       setIsLoading(false);
     }
