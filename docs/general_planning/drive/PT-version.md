@@ -18,7 +18,7 @@ Uma plataforma web de gerenciamento de tarefas onde equipes podem:
 
 **Funcionalidade Principal:**
 
-* Criar workspaces (Organizações) para diferentes equipes ou projetos  
+* Criar workspaces para diferentes equipes ou projetos  
 * Organizar tarefas sob assuntos/categorias dentro de cada workspace  
 * Visualizar trabalho usando quadros Kanban (A Fazer, Em Progresso, Concluído)(ou Eisenhower model)  
 * Mover tarefas entre colunas e categorias com arrastar e soltar  
@@ -169,9 +169,9 @@ Uma plataforma web de gerenciamento de tarefas onde equipes podem:
 
 **8\. Gerenciamento de Usuários \- Sistema de organização (Major \- 2pts)**
 
-* Criar workspaces (organizações)  
+* Criar workspaces  
 * Adicionar/remover usuários de workspaces  
-* Atribuir papéis (admin, membro, visualizador)  
+* Gerenciar papéis de workspace (owner, admin, membro)  
 * Executar ações específicas do workspace
 
 **9\. Web \- Recursos colaborativos em tempo real (Minor \- 1pt)**
@@ -210,30 +210,53 @@ Uma plataforma web de gerenciamento de tarefas onde equipes podem:
 * Email (único)  
 * Hash da senha  
 * Nome de usuário  
+* Nome completo  
 * URL do avatar  
+* Bio  
+* Tipo de conta/autenticação  
+* Preferências do usuário (tema/notificações)  
 * Status online  
 * Timestamps de criação/atualização
 
-**Organizations (Workspaces)**
+**Workspaces**
 
-* ID da Organização  
+* ID do Workspace  
 * Nome  
 * Descrição  
 * Criado por (referência de usuário)  
 * Timestamps de criação/atualização
 
-**Organization Members (Membros da Organização)**
+**Workspace Members (Membros do Workspace)**
 
 * ID do Membro  
-* ID da Organização  
+* ID do Workspace  
 * ID do Usuário  
-* Papel (admin, membro, visualizador)  
+* Papel (owner, admin, membro)  
 * Data de entrada
+
+**Workspace Invitations (Convites de Workspace)**
+
+* ID do Convite  
+* ID do Workspace  
+* Enviado por (referência de usuário)  
+* Email do convidado  
+* Usuário convidado (opcional, quando já existir conta)  
+* Papel concedido no aceite (admin, membro)  
+* Status (pending, accepted, declined)  
+* Timestamps de criação/resposta
 
 **Subjects (Categorias)**
 
 * ID do Assunto  
-* ID da Organização  
+* ID do Workspace  
+* Nome  
+* Código de cor  
+* Ordem de exibição
+
+**Fields (Colunas / Campos do Workspace)**
+
+* ID do Campo  
+* ID do Workspace  
 * Nome  
 * Código de cor  
 * Ordem de exibição
@@ -347,11 +370,11 @@ Uma plataforma web de gerenciamento de tarefas onde equipes podem:
 * Sistema de avatar padrão  
 * Configurações de perfil
 
-**Gerenciamento de Organização**
+**Gerenciamento de Workspace**
 
 * Criar workspace  
 * Editar detalhes do workspace  
-* Deletar workspace (apenas admin)  
+* Deletar workspace (apenas owner)  
 * Ver membros do workspace  
 * Convidar usuários para workspace
 
@@ -994,4 +1017,3 @@ ft\_transcendence/
 5. Sem erros de console?  
 6. Páginas de Política de Privacidade e Termos presentes e acessíveis?  
 7. Múltiplos usuários podem usá-la simultaneamente?
-

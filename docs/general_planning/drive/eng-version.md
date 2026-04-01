@@ -18,7 +18,7 @@ A web-based task management platform where teams can:
 
 **Core Functionality:**
 
-* Create workspaces (Organizations) for different teams or projects
+* Create workspaces for different teams or projects
 * Organize tasks under subjects/categories within each workspace
 * Visualize work using Kanban boards (To Do, In Progress, Done)
 * Move tasks between columns and categories with drag-and-drop
@@ -169,9 +169,9 @@ A web-based task management platform where teams can:
 
 **8\. User Management \- Organization system (Major \- 2pts)**
 
-* Create workspaces (organizations)
+* Create workspaces
 * Add/remove users from workspaces
-* Assign roles (admin, member, viewer)
+* Manage workspace roles (owner, admin, member)
 * Perform workspace-specific actions
 
 **9\. Web \- Real-time collaborative features (Minor \- 1pt)**
@@ -210,30 +210,53 @@ A web-based task management platform where teams can:
 * Email (unique)
 * Password hash
 * Username
+* Full name
 * Avatar URL
+* Bio
+* Account/authentication type
+* User preferences (theme/notifications)
 * Online status
 * Created/updated timestamps
 
-**Organizations (Workspaces)**
+**Workspaces**
 
-* Organization ID
+* Workspace ID
 * Name
 * Description
 * Created by (user reference)
 * Created/updated timestamps
 
-**Organization Members**
+**Workspace Members**
 
 * Member ID
-* Organization ID
+* Workspace ID
 * User ID
-* Role (admin, member, viewer)
+* Role (owner, admin, member)
 * Joined date
+
+**Workspace Invitations**
+
+* Invitation ID
+* Workspace ID
+* Invited by (user reference)
+* Invitee email
+* Invitee user (optional, when the account already exists)
+* Granted role on acceptance (admin, member)
+* Status (pending, accepted, declined)
+* Created/responded timestamps
 
 **Subjects (Categories)**
 
 * Subject ID
-* Organization ID
+* Workspace ID
+* Name
+* Color code
+* Display order
+
+**Fields (Workspace Columns / Fields)**
+
+* Field ID
+* Workspace ID
 * Name
 * Color code
 * Display order
@@ -347,11 +370,11 @@ A web-based task management platform where teams can:
 * Default avatar system
 * Profile settings
 
-**Organization Management**
+**Workspace Management**
 
 * Create workspace
 * Edit workspace details
-* Delete workspace (admin only)
+* Delete workspace (owner only)
 * View workspace members
 * Invite users to workspace
 
