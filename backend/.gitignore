@@ -8,4 +8,7 @@ dist/
 /src/generated/prisma
 
 /prisma/prisma.md
+/prisma/prisma-model.md
 backend-setup.md
+nest-module-provider-scope.md
+nest-module-service-controller.md
