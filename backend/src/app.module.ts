@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PrismaService } from './prisma/prisma.service';
+import { PrismaModule } from './prisma/prisma.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { TasksModule } from './tasks/tasks.module';
 import { UsersModule } from './users/users.module';
@@ -15,6 +15,7 @@ import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
+    PrismaModule,
     SubjectsModule,
     FieldsModule,
     WorkspacesModule,
@@ -27,6 +28,6 @@ import { ChatModule } from './chat/chat.module';
     ChatModule,
   ],
   controllers: [AppController],
-  providers: [AppService, PrismaService],
+  providers: [AppService],
 })
 export class AppModule {}
