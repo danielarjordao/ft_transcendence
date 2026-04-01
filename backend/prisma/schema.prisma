@@ -8,15 +8,119 @@ datasource db {
   provider = "postgresql"
 }
 
+enum WorkspaceMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum WorkspaceInvitationRole {
+  ADMIN
+  MEMBER
+}
+
+enum WorkspaceInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  username     String   @unique
-  fullName     String?
-  passwordHash String?
-  avatarUrl    String?
-  bio          String?
-  isOnline     Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                           String                @id @default(cuid())
+  email                        String                @unique
+  username                     String                @unique
+  fullName                     String?
+  passwordHash                 String?
+  avatarUrl                    String?
+  bio                          String?
+  accountType                  String                @default("standard")
+  preferences                  Json                  @default("{}")
+  isOnline                     Boolean               @default(false)
+  createdAt                    DateTime              @default(now())
+  updatedAt                    DateTime              @updatedAt
+  createdWorkspaces            Workspace[]           @relation("WorkspaceCreator")
+  workspaceMemberships         WorkspaceMember[]
+  sentWorkspaceInvitations     WorkspaceInvitation[] @relation("WorkspaceInvitationSender")
+  receivedWorkspaceInvitations WorkspaceInvitation[] @relation("WorkspaceInvitationRecipient")
+
+  @@index([isOnline])
+}
+
+model Workspace {
+  id          String                @id @default(cuid())
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  createdBy   User                  @relation("WorkspaceCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  members     WorkspaceMember[]
+  invitations WorkspaceInvitation[]
+  subjects    Subject[]
+  fields      Field[]
+
+  @@index([createdById])
+  @@index([name])
+}
+
+model WorkspaceMember {
+  id          String              @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceMemberRole @default(MEMBER)
+  joinedAt    DateTime            @default(now())
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+  @@index([workspaceId, role])
+}
+
+model WorkspaceInvitation {
+  id           String                    @id @default(cuid())
+  workspaceId  String
+  inviterId    String
+  inviteeId    String?
+  inviteeEmail String
+  role         WorkspaceInvitationRole   @default(MEMBER)
+  status       WorkspaceInvitationStatus @default(PENDING)
+  createdAt    DateTime                  @default(now())
+  respondedAt  DateTime?
+  workspace    Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter      User                      @relation("WorkspaceInvitationSender", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee      User?                     @relation("WorkspaceInvitationRecipient", fields: [inviteeId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([inviterId])
+  @@index([inviteeId, status])
+  @@index([inviteeEmail, status])
+}
+
+model Subject {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, position])
+}
+
+model Field {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, position])
 }
