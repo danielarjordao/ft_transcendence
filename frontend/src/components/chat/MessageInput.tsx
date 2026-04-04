@@ -1,23 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
 import { Send } from 'lucide-react';
-
+ 
 interface MessageInputProps {
   onSend: (content: string) => void;
+  onTypingStart?: () => void;
+  onTypingStop?: () => void;
   disabled?: boolean;
 }
-
-export default function MessageInput({ onSend, disabled = false }: MessageInputProps) {
+ 
+export default function MessageInput({
+  onSend,
+  onTypingStart,
+  onTypingStop,
+  disabled = false,
+}: MessageInputProps) {
   const [message, setMessage] = useState('');
-
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
+ 
   const handleSend = () => {
     const trimmed = message.trim();
     if (!trimmed || disabled) return;
-
+ 
     onSend(trimmed);
-    setMessage(''); // Limpar input
+    setMessage('');
+ 
+    // Stop typing ao enviar
+    if (isTypingRef.current && onTypingStop) {
+      onTypingStop();
+      isTypingRef.current = false;
+    }
   };
-
+ 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter = enviar (Shift+Enter = nova linha)
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -25,7 +40,58 @@ export default function MessageInput({ onSend, disabled = false }: MessageInputP
       handleSend();
     }
   };
-
+ 
+  // ===== TYPING INDICATOR LOGIC =====
+  useEffect(() => {
+    // Se não tem handlers ou mensagem vazia, ignora
+    if (!onTypingStart || !onTypingStop || !message) {
+      // Se tinha typing ativo e agora está vazio, stop
+      if (isTypingRef.current && !message && onTypingStop) {
+        onTypingStop();
+        isTypingRef.current = false;
+      }
+      return;
+    }
+ 
+    // Se não estava digitando, começa
+    if (!isTypingRef.current) {
+      console.log('⌨️ Start typing');
+      onTypingStart();
+      isTypingRef.current = true;
+    }
+ 
+    // Clear timeout anterior
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+ 
+    // Stop typing após 1 segundo de inatividade
+    typingTimeoutRef.current = setTimeout(() => {
+      console.log('⌨️ Stop typing (timeout)');
+      onTypingStop();
+      isTypingRef.current = false;
+    }, 1000);
+ 
+    // Cleanup
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [message, onTypingStart, onTypingStop]);
+ 
+  // Cleanup ao desmontar
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (isTypingRef.current && onTypingStop) {
+        onTypingStop();
+      }
+    };
+  }, [onTypingStop]);
+ 
   return (
     <div className="px-4 py-3 border-t border-[#222222]">
       <div className="flex items-end gap-2">
@@ -50,3 +116,4 @@ export default function MessageInput({ onSend, disabled = false }: MessageInputP
     </div>
   );
 }
+ 
