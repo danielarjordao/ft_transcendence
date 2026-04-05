@@ -16,6 +16,7 @@ interface KanbanColumnProps {
   onTaskClick: (task: Task) => void;
   onAddTask: (status: string) => void;
   onDeleteField: (id: string) => void;
+  onDeleteTask: (id: string) => void;
 }
 
 export function KanbanColumn({
@@ -31,6 +32,7 @@ export function KanbanColumn({
   onTaskClick,
   onAddTask,
   onDeleteField,
+  onDeleteTask,
 }: KanbanColumnProps) {
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -81,7 +83,6 @@ export function KanbanColumn({
             {tasks.length}
           </span>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <button
             onClick={() => onAddTask(fieldId)}
@@ -113,6 +114,7 @@ export function KanbanColumn({
             task={task}
             subject={subjects.find(s => s.id === task.subjectId)}
             onClick={onTaskClick}
+            onDelete={onDeleteTask}
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
             isDragging={draggingId === task.id}

@@ -33,17 +33,37 @@ export default function Login() {
   };
 
   const handleSubmit = async () => {
-    const e = validate();
-    if (Object.keys(e).length) { setErrors(e); return; }
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
     setIsLoading(true);
     setServerError('');
+
     try {
+      // TODO: remover mock quando backend estiver no ar
+      if (email === 'ana@test.com' && password === 'test1234') {
+        login('mock-token', {
+          id: '1',
+          fullName: 'Ana Laura',
+          username: 'ana',
+          email: 'ana@test.com',
+          avatarUrl: null,
+          accountType: 'standard',
+          createdAt: new Date().toISOString(),
+        });
+        navigate('/dashboard');
+        return;
+      }
+
       const res = await authService.login({ email, password });
       login(res.accessToken, res.user);
       navigate('/dashboard');
     } catch (err: any) {
-      if (err.response?.status === 401) setServerError('Email or password is incorrect.');
-      else setServerError('Could not connect. Please try again.');
+      const msg = err.response?.data?.message;
+      setServerError(msg ?? 'Credenciais inválidas. Tenta novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -84,6 +104,11 @@ export default function Login() {
         }}>
           <h1 style={{ color: '#EEEEEE', fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Welcome back</h1>
           <p style={{ color: '#666', fontSize: 14, marginBottom: 28 }}>Sign in to your account to continue</p>
+
+          {/* hint de teste — remover antes de ir para produção */}
+          <div style={{ background: '#1A2A1A', border: '1px solid #2A3A2A', borderRadius: 8, padding: '8px 12px', marginBottom: 16, fontSize: 12, color: '#7AAA7A' }}>
+            Teste: <strong>ana@test.com</strong> / <strong>test1234</strong>
+          </div>
 
           {/* Server error */}
           {serverError && (
@@ -165,7 +190,7 @@ export default function Login() {
 
           {/* Sign in button */}
           <button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={!isFormValid || isLoading}
             style={{
               width: '100%',
@@ -230,3 +255,9 @@ export default function Login() {
     </div>
   );
 }
+
+/*Adicionei um hint verde discreto no topo do card mostrando as credenciais de teste — assim qualquer membro da equipe que abrir o localhost sabe o que usar sem precisar perguntar. Remove esse bloco antes de ir para produção.
+
+Credenciais:
+email:    ana@test.com
+password: test1234*/

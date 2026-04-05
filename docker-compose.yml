@@ -36,7 +36,7 @@ services:
       - ./frontend:/app # Mounts local code into the container
       - /app/node_modules # Ensures container's node_modules
     environment:
-      VITE_API_URL: "http://localhost:3000" # API URL for the frontend
+      VITE_API_URL: "http://backend:3000" # API URL for the frontend
     depends_on:
       - backend # Starts only after the backend is ready
 

@@ -3,6 +3,8 @@
 /docs/subject.pdf
 
 dist/
+.env
+.env.local
 
 .agents/
 .codex/

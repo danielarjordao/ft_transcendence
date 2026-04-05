@@ -1,13 +1,17 @@
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const [ready, setReady] = useState(false);
 
-  if (isLoading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>
-      <span style={{ color: '#888', fontSize: 14 }}>Loading...</span>
-    </div>
+  useEffect(() => {
+    setReady(true);
+  }, []);
+
+  if (!ready) return (
+    <div style={{ minHeight: '100vh', background: '#111111' }} />
   );
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;

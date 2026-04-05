@@ -8,6 +8,10 @@ import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import OAuthCallback from './pages/OAuthCallback';
 import KanbanBoard from './components/kanban/KanbanBoard';
+import Friends from './pages/Friends';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import WorkspaceSettings from './pages/WorkspaceSettings';
 
 export default function App() {
   return (
@@ -19,6 +23,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/auth/callback" element={<OAuthCallback />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+            <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route
               path="/dashboard"
               element={
@@ -43,6 +49,23 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/board/:workspaceId/settings"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/friends"
+              element={
+                <ProtectedRoute>
+                  <Friends />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
       </SocketProvider>

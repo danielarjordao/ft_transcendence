@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import ConversationList from './ConversationList';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
-import type { Conversation, Message } from '../../types/chat';
+import { useChat } from '../../hooks/useChat';
+import { MOCK_CONVERSATIONS } from '../../constants/chat';
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -11,232 +12,144 @@ interface ChatPanelProps {
   currentUserId: string;
 }
 
+// Mock seed para popular conversas iniciais
+const MOCK_SEED: Record<string, { senderId: string; senderName: string; content: string; offset: number }[]> = {
+  '1': [
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Hey! Did you see the new designs for the dashboard?',            offset: 240000 },
+    { senderId: 'me', senderName: 'You',            content: 'I think we need to adjust the spacing on the cards',             offset: 180000 },
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Yeah I saw them, they look great overall',                       offset: 150000 },
+    { senderId: 'me', senderName: 'You',            content: 'Good catch on the spacing, let me update that',                  offset: 90000  },
+    { senderId: '2',  senderName: 'Sarah Chen',    content: 'Sounds good! I will update the board once you push the changes', offset: 60000  },
+  ],
+  '2': [
+    { senderId: '3',  senderName: 'Marcus Johnson', content: 'Can you review the designs when you get a chance?', offset: 3600000 },
+  ],
+  '3': [
+    { senderId: 'me', senderName: 'You',            content: 'Great work on the presentation!', offset: 86400000 },
+    { senderId: '4',  senderName: 'Emma Williams',  content: 'Thanks for the feedback!',        offset: 86000000 },
+  ],
+  '4': [],
+};
+
 export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelProps) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  
+  // ===== HOOK COM SOCKET.IO =====
+  const {
+    messages,
+    typingUsers,
+    sendMessage,
+    loadMessages,
+    startTyping,
+    stopTyping,
+    joinRoom,
+    leaveRoom,
+  } = useChat({ currentUserId, currentUserName: 'You' });
 
-  // ===== MOCK DATA (Bloco 2 - dados estáticos) =====
-  const mockConversations: Conversation[] = [
-    {
-      id: '1',
-      friendId: '2',
-      friendName: 'Sarah Chen',
-      friendAvatar: undefined,
-      isOnline: true,
-      lastMessage: 'Sounds good! I will update the board...',
-      lastMessageTime: '2m ago',
-      unreadCount: 3,
-    },
-    {
-      id: '2',
-      friendId: '3',
-      friendName: 'Marcus Johnson',
-      friendAvatar: undefined,
-      isOnline: true,
-      lastMessage: 'Can you review the designs when you...',
-      lastMessageTime: '1h ago',
-      unreadCount: 0,
-    },
-    {
-      id: '3',
-      friendId: '4',
-      friendName: 'Emma Williams',
-      friendAvatar: undefined,
-      isOnline: false,
-      lastMessage: 'Thanks for the feedback!',
-      lastMessageTime: 'Yesterday',
-      unreadCount: 1,
-    },
-    {
-      id: '4',
-      friendId: '5',
-      friendName: 'Alex Rodriguez',
-      friendAvatar: undefined,
-      isOnline: true,
-      lastMessage: 'Let us sync up tomorrow morning',
-      lastMessageTime: '2d ago',
-      unreadCount: 0,
-    },
-  ];
+  // ===== CARREGAR MOCK SEED (apenas uma vez) =====
+  useEffect(() => {
+    Object.entries(MOCK_SEED).forEach(([roomId, seed]) => {
+      const msgs = seed.map((m, i) => ({
+        id: `seed-${roomId}-${i}`,
+        senderId: m.senderId === 'me' ? currentUserId : m.senderId,
+        senderName: m.senderName,
+        content: m.content,
+        createdAt: new Date(Date.now() - m.offset).toISOString(),
+        roomId,
+      }));
+      loadMessages(roomId, msgs);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const mockMessages: Record<string, Message[]> = {
-    '1': [
-      {
-        id: 'm1',
-        senderId: '2',
-        senderName: 'Sarah Chen',
-        content: 'Hey! Did you see the new designs for the dashboard?',
-        createdAt: new Date(Date.now() - 240000).toISOString(), // 4 min ago
-        roomId: '1',
-      },
-      {
-        id: 'm2',
-        senderId: currentUserId,
-        senderName: 'You',
-        content: 'I think we need to adjust the spacing on the cards',
-        createdAt: new Date(Date.now() - 180000).toISOString(), // 3 min ago
-        roomId: '1',
-      },
-      {
-        id: 'm3',
-        senderId: '2',
-        senderName: 'Sarah Chen',
-        content: 'Yeah I saw them, they look great overall',
-        createdAt: new Date(Date.now() - 150000).toISOString(),
-        roomId: '1',
-      },
-      {
-        id: 'm4',
-        senderId: currentUserId,
-        senderName: 'You',
-        content: 'Good catch on the spacing, let me update that',
-        createdAt: new Date(Date.now() - 90000).toISOString(),
-        roomId: '1',
-      },
-      {
-        id: 'm5',
-        senderId: '2',
-        senderName: 'Sarah Chen',
-        content: 'Sounds good! I will update the board once you push the changes',
-        createdAt: new Date(Date.now() - 60000).toISOString(), // 1 min ago
-        roomId: '1',
-      },
-    ],
-    '2': [
-      {
-        id: 'm6',
-        senderId: '3',
-        senderName: 'Marcus Johnson',
-        content: 'Can you review the designs when you get a chance?',
-        createdAt: new Date(Date.now() - 3600000).toISOString(), // 1h ago
-        roomId: '2',
-      },
-    ],
-    '3': [
-      {
-        id: 'm7',
-        senderId: currentUserId,
-        senderName: 'You',
-        content: 'Great work on the presentation!',
-        createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
-        roomId: '3',
-      },
-      {
-        id: 'm8',
-        senderId: '4',
-        senderName: 'Emma Williams',
-        content: 'Thanks for the feedback!',
-        createdAt: new Date(Date.now() - 86000000).toISOString(),
-        roomId: '3',
-      },
-    ],
-    '4': [],
-  };
+  // ===== JOIN/LEAVE ROOM quando selecionar conversa =====
+  useEffect(() => {
+    if (!selectedConversationId) return;
 
-  // Estado de typing (mock - no Bloco 3 virá do Socket)
-  const [isTyping] = useState(false);
+    console.log('🔌 Selected conversation:', selectedConversationId);
+    joinRoom(selectedConversationId);
+
+    return () => {
+      leaveRoom(selectedConversationId);
+    };
+  }, [selectedConversationId, joinRoom, leaveRoom]);
 
   // ===== HANDLERS =====
-  const handleSelectConversation = (conversationId: string) => {
-    setSelectedConversationId(conversationId);
-  };
-
-  const handleBackToList = () => {
-    setSelectedConversationId(null);
-  };
+  const selectedConversation = MOCK_CONVERSATIONS.find(c => c.id === selectedConversationId);
+  const currentMessages = selectedConversationId ? (messages[selectedConversationId] ?? []) : [];
+  
+  // Verificar se alguém está digitando nesta room
+  const isTyping = selectedConversationId
+    ? (typingUsers[selectedConversationId]?.size ?? 0) > 0
+    : false;
 
   const handleSendMessage = (content: string) => {
-    console.log('📤 Sending message:', content);
-    // Bloco 3: Aqui será socket.emit('message:send', { content, roomId })
-
-    // Mock: Adicionar mensagem instantaneamente (optimistic update)
-    const newMessage: Message = {
-      id: 'temp-' + Date.now(),
-      senderId: currentUserId,
-      senderName: 'You',
-      content,
-      createdAt: new Date().toISOString(),
-      roomId: selectedConversationId!,
-    };
-
-    // Em produção, isso seria feito via Socket (Bloco 3)
-    console.log('✅ Message sent (mock):', newMessage);
+    if (!selectedConversationId) return;
+    
+    // Agora usa Socket.io internamente!
+    sendMessage(selectedConversationId, content);
   };
 
-  // Pegar conversa selecionada
-  const selectedConversation = mockConversations.find(
-    (c) => c.id === selectedConversationId
-  );
+  const handleStartTyping = () => {
+    if (!selectedConversationId) return;
+    startTyping(selectedConversationId);
+  };
 
-  // Pegar mensagens da conversa selecionada
-  const currentMessages = selectedConversationId
-    ? mockMessages[selectedConversationId] || []
-    : [];
+  const handleStopTyping = () => {
+    if (!selectedConversationId) return;
+    stopTyping(selectedConversationId);
+  };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed right-0 top-0 h-full w-96 bg-[#1A1A1A] shadow-2xl z-50 flex flex-col">
+    <div style={{ position: 'fixed', right: 0, top: 0, height: '100%', width: 384, background: '#1A1A1A', boxShadow: '0 0 40px rgba(0,0,0,0.6)', zIndex: 50, display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       {selectedConversationId && selectedConversation ? (
-        // Frame 2: Conversa aberta
         <>
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#222222]">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid #222222' }}>
             <button
-              onClick={handleBackToList}
-              className="p-1 hover:bg-white/10 rounded transition-colors"
-              aria-label="Back to list"
+              onClick={() => setSelectedConversationId(null)}
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, borderRadius: 6, display: 'flex', alignItems: 'center' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <ArrowLeft className="w-5 h-5 text-white" />
+              <ArrowLeft size={18} color="#CCCCCC" />
             </button>
-
-            {/* Friend info */}
-            <div className="flex items-center gap-2 flex-1">
-              <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-semibold">
-                  {selectedConversation.friendName.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-white font-medium text-sm">
-                  {selectedConversation.friendName}
-                </span>
-                <span className="text-[#4CAF50] text-xs">
-                  {selectedConversation.isOnline ? 'Online' : 'Offline'}
-                </span>
-              </div>
+            <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ color: '#CCC', fontSize: 12, fontWeight: 700 }}>{selectedConversation.friendName.charAt(0).toUpperCase()}</span>
             </div>
-
-            {/* Return to list link */}
-            <button
-              onClick={handleBackToList}
-              className="text-[#4CAF50] text-xs hover:underline"
-            >
-              Back to list
-            </button>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600, margin: 0 }}>{selectedConversation.friendName}</p>
+              <p style={{ color: selectedConversation.isOnline ? '#50C878' : '#555', fontSize: 11, margin: 0 }}>{selectedConversation.isOnline ? 'Online' : 'Offline'}</p>
+            </div>
           </div>
 
-          {/* Messages */}
+          {/* Messages - AGORA COM SOCKET.IO */}
           <MessageList
             messages={currentMessages}
             currentUserId={currentUserId}
             isTyping={isTyping}
           />
 
-          {/* Input */}
-          <MessageInput onSend={handleSendMessage} />
+          {/* Input - COM TYPING INDICATORS */}
+          <MessageInput
+            onSend={handleSendMessage}
+            onTypingStart={handleStartTyping}
+            onTypingStop={handleStopTyping}
+          />
 
-          {/* Footer hint */}
-          <div className="px-4 py-2 border-t border-[#222222]">
-            <p className="text-gray-500 text-xs text-center">
-              Chat Sidebar — Active Conversation
+          {/* Footer */}
+          <div style={{ padding: '8px 16px', borderTop: '1px solid #222222' }}>
+            <p style={{ color: '#4CAF50', fontSize: 11, textAlign: 'center', margin: 0 }}>
+              ✅ Socket.io ready! Aguardando backend...
             </p>
           </div>
         </>
       ) : (
-        // Frame 1: Lista de conversas
         <ConversationList
-          conversations={mockConversations}
-          onSelectConversation={handleSelectConversation}
+          conversations={MOCK_CONVERSATIONS}
+          onSelectConversation={setSelectedConversationId}
           onClose={onClose}
         />
       )}
