@@ -3,135 +3,157 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import 'multer';
+import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
+import { Prisma } from '../generated/prisma/client';
 
 @Injectable()
 export class UsersService {
-  // Encapsulated mock data inside the service
-  private mockUsers = [
-    {
-      id: 'usr_123',
-      email: 'ana.laura@42.fr',
-      fullName: 'Ana Laura',
-      username: 'ana_laura',
-      bio: 'Frontend lead @ ft_transcendence.',
-      avatarUrl: 'https://github.com/ana.png',
-      createdAt: '2024-01-15T10:30:00Z',
-      accountType: 'standard',
-      status: 'online',
-      preferences: {
-        theme: 'dark',
-        notifications: {
-          mentions: true,
-          workspaceInvites: true,
-          directMessages: true,
-        },
-      },
-    },
-    {
-      id: 'usr_456',
-      email: 'lucas.silva@42.fr',
-      fullName: 'Lucas Silva',
-      username: 'lucas_dev',
-      bio: 'Frontend engineer.',
-      avatarUrl: 'https://github.com/lucas.png',
-      createdAt: '2024-02-10T09:00:00Z',
-      accountType: 'standard',
-      status: 'online',
-      preferences: {
-        theme: 'light',
-        notifications: {
-          mentions: true,
-          workspaceInvites: false,
-          directMessages: true,
-        },
-      },
-    },
-  ];
+  // Injecting PrismaService to interact with the database
+  constructor(private readonly prisma: PrismaService) {}
 
-  getMe(userId: string) {
-    // TODO: Replace with Prisma - prisma.user.findUnique
-    const user = this.mockUsers.find((user) => user.id === userId);
+  async getMe(userId: string) {
+    // `findUnique` translates to a SQL query that looks for a single record based on unique criteria.
+    // For example: `SELECT * FROM "User" WHERE id = $1 LIMIT 1`.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  updateProfile(userId: string, dto: UpdateProfileDto) {
-    // TODO: Replace with Prisma - verify if new username is unique (Throw 409 if not), then prisma.user.update
-    const user = this.getMe(userId);
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    // First, we must ensure the new username doesn't belong to someone else.
+    if (dto.username) {
+      const existingUser = await this.prisma.user.findUnique({
+        where: { username: dto.username },
+      });
 
-    if (dto.username && dto.username !== user.username) {
-      const isTaken = this.mockUsers.some((u) => u.username === dto.username);
-      if (isTaken) throw new ConflictException('Username is already taken');
-      user.username = dto.username;
+      // If a user exists with this username, and their ID is different from the current user:
+      if (existingUser && existingUser.id !== userId) {
+        throw new ConflictException('Username is already taken');
+      }
     }
 
-    if (dto.fullName) user.fullName = dto.fullName;
-    if (dto.bio !== undefined) user.bio = dto.bio;
+    // `update` modifies an existing record.
+    // if a field in `data` is undefined, Prisma simply
+    // ignores it and doesn't update that specific column in the database.
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        username: dto.username,
+        fullName: dto.fullName,
+        bio: dto.bio,
+      },
+    });
 
-    return user;
+    return updatedUser;
   }
 
-  updatePreferences(userId: string, dto: UpdatePreferencesDto) {
-    // TODO: Replace with Prisma - prisma.user.update (update JSON preferences object)
-    const user = this.getMe(userId);
-    if (dto.theme) user.preferences.theme = dto.theme;
+  async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
+    // Prisma treats JSON columns as standard JavaScript objects.
+    // To update nested JSON structures, we first fetch the current state,
+    // merge the new values in memory, and send the complete object back to the database.
+    const user = await this.getMe(userId);
 
-    if (dto.notifications) {
-      user.preferences.notifications = {
-        ...user.preferences.notifications,
-        ...dto.notifications,
-      };
-    }
-    return user.preferences;
+    // Asserting the type to deal with Prisma's JSON value type safety
+    const currentPrefs = (user.preferences as UpdatePreferencesDto) || {};
+    const currentNotifs = currentPrefs.notifications || {};
+
+    const mergedPreferences = {
+      ...currentPrefs,
+      theme: dto.theme || currentPrefs.theme,
+      notifications: {
+        ...currentNotifs,
+        ...(dto.notifications || {}),
+      },
+    };
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        // Ensuring the object is properly serialized for Prisma
+        preferences: mergedPreferences as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    return updatedUser.preferences;
   }
 
-  getPublicProfile(userId: string) {
-    // TODO: Replace with Prisma - prisma.user.findUnique (select specific public fields only)
-    const user = this.mockUsers.find((user) => user.id === userId);
+  async getPublicProfile(userId: string) {
+    // The `select` object acts like a SQL projection.
+    // Instead of fetching all columns (including sensitive ones like passwordHash),
+    // it only fetches the exact columns defined as `true`. This saves RAM and bandwidth.
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        bio: true,
+        avatarUrl: true,
+        isOnline: true,
+      },
+    });
+
     if (!user) throw new NotFoundException('User not found');
 
+    // Restructuring the response to convert `isOnline` boolean into a more frontend-friendly `status` string.
+    const { isOnline, ...rest } = user;
     return {
-      id: user.id,
-      fullName: user.fullName,
-      username: user.username,
-      bio: user.bio,
-      avatarUrl: user.avatarUrl,
-      status: user.status,
+      ...rest,
+      status: isOnline ? 'online' : 'offline',
     };
   }
 
-  search(query: string, limit: number) {
-    // TODO: Replace with Prisma - prisma.user.findMany (where username or fullName contains query string, case insensitive)
+  async search(query: string, limit: number) {
     if (!query) return [];
-    const lowerQuery = query.toLowerCase();
 
-    const results = this.mockUsers
-      .filter(
-        (user) =>
-          user.fullName.toLowerCase().includes(lowerQuery) ||
-          user.username.toLowerCase().includes(lowerQuery),
-      )
-      .slice(0, limit);
+    // `findMany` retrieves an array of records.
+    // The `OR` operator checks multiple conditions.
+    // `contains` acts like a SQL `LIKE '%query%'`.
+    // `mode: 'insensitive'` ensures 'Ana' matches 'ana' (acts like `ILIKE` in PostgreSQL).
+    // `take` is the equivalent of SQL `LIMIT`.
+    const users = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { contains: query, mode: 'insensitive' } },
+          { fullName: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      take: limit,
+      select: {
+        id: true,
+        fullName: true,
+        username: true,
+        avatarUrl: true,
+        isOnline: true,
+      },
+    });
 
-    return results.map((user) => ({
-      id: user.id,
-      fullName: user.fullName,
-      username: user.username,
-      avatarUrl: user.avatarUrl,
-      status: user.status,
-    }));
+    return users;
   }
 
-  uploadAvatar(userId: string, file: Express.Multer.File) {
-    // TODO: Save file to 'avatars/' folder or Cloud Storage.
-    // TODO: Update the user's 'avatarUrl' in the database using Prisma.
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    // TODO: Save file to 'avatars/' folder or Cloud Storage (AWS S3 / Google Cloud).
+
     console.log(
-      `Uploading avatar for user ${userId}, file: ${file.originalname}`,
+      `[Storage Mock] Uploading avatar for user ${userId}, file: ${file.originalname}`,
     );
+
+    const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.png`;
+
+    // The generated URL is stored in the database, but the actual file handling is mocked for now.
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: newAvatarUrl },
+    });
+
     return {
-      avatarUrl: `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.png`,
+      avatarUrl: newAvatarUrl,
     };
   }
 }
