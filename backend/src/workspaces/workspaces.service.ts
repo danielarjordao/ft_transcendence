@@ -4,163 +4,236 @@ import {
   ForbiddenException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
-import {
-  InviteMemberDto,
-  WorkspaceInvitation,
-} from './dto/workspace-invitation.dto';
 import { UpdateMemberRoleDto } from './dto/workspace-member.dto';
+import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
 
 @Injectable()
 export class WorkspacesService {
-  // TODO: Remove mocks when Prisma is integrated
-  private workspaceMembers = [
-    {
-      userId: 'usr_123',
-      workspaceId: 'ws_1',
-      username: 'ana_laura',
-      fullName: 'Ana Laura',
-      role: 'admin',
-      status: 'online',
-    },
-    {
-      userId: 'usr_456',
-      workspaceId: 'ws_1',
-      username: 'murilo_db',
-      fullName: 'Murilo',
-      role: 'member',
-      status: 'offline',
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  private workspaceInvitations: WorkspaceInvitation[] = [];
+  // Helper method to check if the user has admin rights in the workspace
+  private async checkAdminRights(userId: string, workspaceId: string) {
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: {
+        workspaceId_userId: { workspaceId, userId },
+      },
+    });
 
-  create(userId: string, dto: CreateWorkspaceDto) {
-    // TODO: Replace with Prisma - Create workspace, assign caller as 'owner' in WorkspaceMember.
-    // TODO: If dto.subjects or dto.fields are provided, create them in the same Prisma transaction.
-    return {
-      id: `ws_${Date.now()}`,
-      ...dto,
-      createdAt: new Date().toISOString(),
-    };
+    if (!membership) {
+      throw new NotFoundException(
+        'Workspace not found or you are not a member',
+      );
+    }
+
+    if (membership.role === WorkspaceMemberRole.MEMBER) {
+      throw new ForbiddenException('Admin access required for this action');
+    }
+
+    return membership;
   }
 
-  findAll(userId: string, query: ListWorkspacesQueryDto) {
-    // TODO: Replace with Prisma - Find workspaces where the user is a member. Apply limit, offset, and search.
-    const { limit = 20, offset = 0 } = query;
-    return {
-      items: [
-        {
-          id: 'ws_1',
-          name: 'Fazelo Core',
-          description: 'Main product workspace.',
-          subjects: [],
-          fields: [],
+  async create(userId: string, dto: CreateWorkspaceDto) {
+    // Create workspace and add creator as owner in a single transaction.
+    const newWorkspace = await this.prisma.workspace.create({
+      data: {
+        name: dto.name,
+        description: dto.description,
+        createdById: userId,
+        members: {
+          create: {
+            userId: userId,
+            role: WorkspaceMemberRole.OWNER,
+          },
         },
-      ],
-      pageInfo: { limit, offset, total: 1, hasMore: false },
-    };
+        subjects: dto.subjects
+          ? {
+              create: dto.subjects.map((subject, index) => ({
+                name: subject.name,
+                color: subject.color,
+                position: index,
+              })),
+            }
+          : undefined,
+        fields: dto.fields
+          ? {
+              create: dto.fields.map((field, index) => ({
+                name: field.name,
+                color: field.color,
+                position: index,
+              })),
+            }
+          : undefined,
+      },
+    });
+
+    return newWorkspace;
   }
 
-  findOne(userId: string, wsId: string) {
-    // TODO: Replace with Prisma - Find workspace by ID. Throw 403 if user is not a member.
+  async findAll(userId: string, query: ListWorkspacesQueryDto) {
+    // Fetch workspaces where user is a member, with pagination and optional search.
+    const { limit = 20, offset = 0, search } = query;
+
+    // Constructing the where clause to filter workspaces by membership and optional search term
+    const whereClause: Prisma.WorkspaceWhereInput = {
+      members: {
+        some: { userId: userId },
+      },
+    };
+
+    if (search) {
+      whereClause.name = { contains: search, mode: 'insensitive' };
+    }
+
+    // Using a transaction to get total count and paginated results in one go
+    const [total, workspaces] = await this.prisma.$transaction([
+      this.prisma.workspace.count({ where: whereClause }),
+      this.prisma.workspace.findMany({
+        where: whereClause,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
     return {
-      id: wsId,
-      name: 'Fazelo Core',
-      description: 'Main product workspace.',
-      subjects: [],
-      fields: [],
-      memberCount: 1,
-      createdAt: new Date().toISOString(),
+      items: workspaces,
+      pageInfo: {
+        limit,
+        offset,
+        total,
+        hasMore: offset + limit < total,
+      },
     };
   }
 
-  update(userId: string, wsId: string, dto: UpdateWorkspaceDto) {
-    // TODO: Replace with Prisma - Verify if user is admin/owner. Update workspace data.
+  async findOne(userId: string, wsId: string) {
+    // Fetch workspace by ID, ensuring the user is a member, and include related data.
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: wsId },
+      include: {
+        members: {
+          where: { userId: userId },
+        },
+        subjects: true,
+        fields: true,
+        _count: { select: { members: true } },
+      },
+    });
+
+    if (!workspace || workspace.members.length === 0) {
+      throw new NotFoundException('Workspace not found or access denied');
+    }
+
+    // Restructure the response to include member count and exclude the members array.
+    const { members: _members, _count, ...rest } = workspace;
     return {
-      id: wsId,
-      ...dto,
-      updatedAt: new Date().toISOString(),
+      ...rest,
+      memberCount: _count.members,
     };
   }
 
-  remove(userId: string, wsId: string) {
-    // TODO: Replace with Prisma - Verify if user is owner. Delete workspace and cascade relations.
-    // TODO: Remove console.log and perform actual deletion in DB.
-    console.log(`User ${userId} requested deletion of workspace ${wsId}`);
-    return;
+  async update(userId: string, wsId: string, dto: UpdateWorkspaceDto) {
+    // Check admin rights and update workspace details.
+    await this.checkAdminRights(userId, wsId);
+
+    // Only update fields that are provided in the DTO
+    return await this.prisma.workspace.update({
+      where: { id: wsId },
+      data: {
+        name: dto.name,
+        description: dto.description,
+      },
+    });
   }
 
-  listMembers(userId: string, wsId: string) {
-    // TODO: Use Prisma to verify 'userId' has access to this workspace.
-    // TODO: Use Prisma to fetch WorkspaceMember records where workspaceId = wsId.
-    // TODO: Join with the User table to include username, fullName, etc.
-    return this.workspaceMembers
-      .filter((m) => m.workspaceId === wsId)
-      .map(({ workspaceId: _workspaceId, ...rest }) => rest); // Remove workspaceId to match API Contract 3.6
+  async remove(userId: string, wsId: string) {
+    // Check admin rights and delete workspace.
+    const membership = await this.checkAdminRights(userId, wsId);
+
+    // Only the owner can delete the workspace
+    if (membership.role !== WorkspaceMemberRole.OWNER) {
+      throw new ForbiddenException('Only the workspace owner can delete it');
+    }
+
+    // Deleting the workspace will cascade and remove all related data due to Prisma's referential actions
+    await this.prisma.workspace.delete({
+      where: { id: wsId },
+    });
   }
 
-  inviteMember(userId: string, wsId: string, dto: InviteMemberDto) {
-    // TODO: Use Prisma to check if 'userId' is admin in wsId.
-    // TODO: Use Prisma to check if invitee (by email) is already a member (throw 409).
-    // TODO: Use Prisma to create the invitation record.
-    // TODO: Trigger a Socket.io event 'workspace_invitation_received' to 'user:{inviteeId}'.
+  async listMembers(userId: string, wsId: string) {
+    // Fetch WorkspaceMember and join with User.
+    const isMember = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: wsId, userId: userId } },
+    });
 
-    // Mock for API Contract Section 3.7
-    const newInvite = {
-      id: `inv_${Date.now()}`,
-      workspaceId: wsId,
-      inviterId: userId,
-      inviteeEmail: dto.email,
-      role: dto.role,
-      status: 'pending',
-      createdAt: new Date(),
-    };
+    if (!isMember) {
+      throw new NotFoundException('Workspace not found or access denied');
+    }
 
-    this.workspaceInvitations.push(newInvite);
-    return newInvite;
+    // Fetch members with user details, ordered by join date.
+    const members = await this.prisma.workspaceMember.findMany({
+      where: { workspaceId: wsId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            isOnline: true,
+          },
+        },
+      },
+      orderBy: { joinedAt: 'asc' },
+    });
+
+    return members.map((m) => ({
+      userId: m.userId,
+      role: m.role,
+      joinedAt: m.joinedAt,
+      username: m.user.username,
+      fullName: m.user.fullName,
+      status: m.user.isOnline ? 'online' : 'offline',
+    }));
   }
 
-  updateMemberRole(
+  async updateMemberRole(
     userId: string,
     wsId: string,
     memberId: string,
     dto: UpdateMemberRoleDto,
   ) {
-    // TODO: Use Prisma to verify 'userId' is an admin in this workspace.
-    // TODO: Use Prisma to update the role of the memberId in this wsId.
-    // TODO: Trigger a Socket.io event 'member_role_updated' to 'workspace:{wsId}'.
+    // Verify admin rights and update member role, ensuring users cannot demote themselves.
+    await this.checkAdminRights(userId, wsId);
 
-    if (userId !== 'usr_123')
-      throw new ForbiddenException('Only admins can change roles');
-
-    const member = this.workspaceMembers.find(
-      (m) => m.workspaceId === wsId && m.userId === memberId,
-    );
-
-    if (!member) throw new NotFoundException('Member not found');
-
-    if (member.userId === userId && dto.role === 'member') {
+    // Using strictly the Prisma enum type, matching the API contract
+    if (userId === memberId && dto.role === WorkspaceMemberRole.MEMBER) {
       throw new UnprocessableEntityException('Cannot demote yourself');
     }
 
-    member.role = dto.role;
-    const { workspaceId: _workspaceId, ...updatedMember } = member;
-    return updatedMember; // Match Section 3.10
+    const updatedMember = await this.prisma.workspaceMember.update({
+      where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
+      data: { role: dto.role as WorkspaceMemberRole },
+    });
+
+    return {
+      userId: updatedMember.userId,
+      role: updatedMember.role,
+    };
   }
 
-  removeMember(userId: string, wsId: string, memberId: string) {
-    // TODO: Use Prisma to verify 'userId' is an admin OR 'userId' === memberId (leaving).
-    // TODO: Use Prisma to delete the WorkspaceMember record.
-    // TODO: Trigger a Socket.io event 'member_removed' to 'workspace:{wsId}'.
+  async removeMember(userId: string, wsId: string, memberId: string) {
+    // Verify admin/self and delete.
+    if (userId !== memberId) {
+      await this.checkAdminRights(userId, wsId);
+    }
 
-    const index = this.workspaceMembers.findIndex(
-      (m) => m.workspaceId === wsId && m.userId === memberId,
-    );
-
-    if (index === -1) throw new NotFoundException('Member not found');
-    this.workspaceMembers.splice(index, 1);
+    await this.prisma.workspaceMember.delete({
+      where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
+    });
   }
 }
