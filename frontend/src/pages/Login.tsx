@@ -45,7 +45,7 @@ export default function Login() {
     try {
       // TODO: remover mock quando backend estiver no ar
       if (email === 'ana@test.com' && password === 'test1234') {
-        login('mock-token', {
+        login('mock-token', '', {
           id: '1',
           fullName: 'Ana Laura',
           username: 'ana',
@@ -59,7 +59,7 @@ export default function Login() {
       }
 
       const res = await authService.login({ email, password });
-      login(res.accessToken, res.user);
+      login(res.accessToken, res.refreshToken, res.user);
       navigate('/dashboard');
     } catch (err: any) {
       const msg = err.response?.data?.message;

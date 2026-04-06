@@ -6,7 +6,7 @@ export interface User {
   bio?: string;
   avatarUrl: string | null;
   accountType: 'standard' | 'oauth_42' | 'oauth_google' | 'oauth_github';
-  createdAt: string;
+  createdAt?: string;
 }
 
 export interface LoginRequest {
@@ -25,4 +25,5 @@ export interface RegisterRequest {
 export interface AuthResponse {
   user: User;
   accessToken: string;
+  refreshToken: string;
 }
