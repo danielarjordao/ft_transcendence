@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import ChatPanel from '../components/chat/ChatPanel';
 import { useAuth } from '../contexts/AuthContext';
-
+import { useSocket } from '../contexts/SocketContext';
+ 
 // ── tipos ─────────────────────────────────────────────────────────────────────
-
+ 
 interface Friend {
   id: string;
   username: string;
@@ -14,7 +15,7 @@ interface Friend {
   online: boolean;
   addedAt: string;
 }
-
+ 
 interface FriendRequest {
   id: string;
   username: string;
@@ -22,28 +23,28 @@ interface FriendRequest {
   avatarUrl: string | null;
   sentAt: string;
 }
-
+ 
 type Tab = 'friends' | 'pending' | 'sent';
-
+ 
 // ── mock data ─────────────────────────────────────────────────────────────────
-
+ 
 const MOCK_FRIENDS: Friend[] = [
   { id: 'u1', username: 'lucas_dev',  fullName: 'Lucas',   avatarUrl: null, online: true,  addedAt: 'Mar 10' },
   { id: 'u2', username: 'daniela_be', fullName: 'Daniela', avatarUrl: null, online: true,  addedAt: 'Mar 12' },
   { id: 'u3', username: 'murilo_db',  fullName: 'Murilo',  avatarUrl: null, online: false, addedAt: 'Mar 14' },
 ];
-
+ 
 const MOCK_RECEIVED: FriendRequest[] = [
   { id: 'r1', username: 'joao_42',    fullName: 'João',    avatarUrl: null, sentAt: '2h ago'    },
   { id: 'r2', username: 'carla_dev',  fullName: 'Carla',   avatarUrl: null, sentAt: 'Yesterday' },
 ];
-
+ 
 const MOCK_SENT: FriendRequest[] = [
   { id: 's1', username: 'pedro_ui',   fullName: 'Pedro',   avatarUrl: null, sentAt: '1d ago'    },
 ];
-
+ 
 // ── avatar ────────────────────────────────────────────────────────────────────
-
+ 
 function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
   const initials = name.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   return (
@@ -56,12 +57,13 @@ function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
     </div>
   );
 }
-
+ 
 // ── componente principal ──────────────────────────────────────────────────────
-
+ 
 export default function Friends() {
   const { user } = useAuth();
-
+  const { socket, isConnected } = useSocket();
+ 
   const [tab, setTab]                   = useState<Tab>('friends');
   const [friends, setFriends]           = useState<Friend[]>(MOCK_FRIENDS);
   const [received, setReceived]         = useState<FriendRequest[]>(MOCK_RECEIVED);
@@ -73,17 +75,68 @@ export default function Friends() {
   const [profileOpen, setProfileOpen]   = useState(false);
   const [chatOpen, setChatOpen]         = useState(false);
   const [_chatFriendId, setChatFriendId] = useState<string | null>(null);
-
-  const onlineCount  = friends.filter(f => f.online).length;
+ 
+  // ===== TRACK ONLINE USERS =====
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+ 
+  // ===== LISTENERS DE SOCKET.IO =====
+  useEffect(() => {
+    if (!isConnected) {
+      console.log('⚠️ Friends: Socket not connected, online status unavailable');
+      return;
+    }
+ 
+    console.log('🟢 Friends: Registering online/offline listeners');
+ 
+    // Listener: user:online
+    const handleUserOnline = (userId: string) => {
+      console.log('✅ User online:', userId);
+      setOnlineUserIds(prev => new Set(prev).add(userId));
+    };
+ 
+    // Listener: user:offline
+    const handleUserOffline = (userId: string) => {
+      console.log('❌ User offline:', userId);
+      setOnlineUserIds(prev => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    };
+ 
+    // Registrar listeners
+    socket.on('user:online', handleUserOnline);
+    socket.on('user:offline', handleUserOffline);
+ 
+    // Cleanup
+    return () => {
+      console.log('🔴 Friends: Removing online/offline listeners');
+      socket.off('user:online', handleUserOnline);
+      socket.off('user:offline', handleUserOffline);
+    };
+  }, [isConnected, socket]);
+ 
+  // ===== CALCULAR STATUS ONLINE (mock + socket) =====
+  const getFriendOnlineStatus = (friendId: string): boolean => {
+    // Se socket conectado, usar dados em tempo real
+    if (isConnected && onlineUserIds.size > 0) {
+      return onlineUserIds.has(friendId);
+    }
+    // Fallback: usar mock data
+    const friend = friends.find(f => f.id === friendId);
+    return friend?.online ?? false;
+  };
+ 
+  const onlineCount = friends.filter(f => getFriendOnlineStatus(f.id)).length;
   const pendingCount = received.length;
-
+ 
   const filteredFriends = friends.filter(f =>
     f.username.toLowerCase().includes(search.toLowerCase()) ||
     f.fullName.toLowerCase().includes(search.toLowerCase())
   );
-
+ 
   // ── handlers ─────────────────────────────────────────────────────────────
-
+ 
   const handleAdd = () => {
     const username = addInput.trim().toLowerCase();
     if (!username) return;
@@ -110,12 +163,12 @@ export default function Friends() {
     setAddSuccess(`Friend request sent to @${username}.`);
     setTimeout(() => setAddSuccess(''), 3000);
   };
-
+ 
   const handleRemoveFriend = (id: string) => {
     // TODO: DELETE /api/friends/:id
     setFriends(prev => prev.filter(f => f.id !== id));
   };
-
+ 
   const handleAccept = (req: FriendRequest) => {
     // TODO: POST /api/friends/request/:id/accept
     setReceived(prev => prev.filter(r => r.id !== req.id));
@@ -128,24 +181,24 @@ export default function Friends() {
       addedAt: 'Just now',
     }]);
   };
-
+ 
   const handleDecline = (id: string) => {
     // TODO: POST /api/friends/request/:id/decline
     setReceived(prev => prev.filter(r => r.id !== id));
   };
-
+ 
   const handleCancelRequest = (id: string) => {
     // TODO: DELETE /api/friends/request/:id
     setSent(prev => prev.filter(r => r.id !== id));
   };
-
+ 
   const handleOpenChat = (friendId: string) => {
     setChatFriendId(friendId);
     setChatOpen(true);
   };
-
+ 
   // ── estilos compartilhados ────────────────────────────────────────────────
-
+ 
   const cardStyle = {
     background: '#1A1A1A',
     border: '1px solid #2A2A2A',
@@ -155,7 +208,7 @@ export default function Friends() {
     alignItems: 'center',
     gap: 14,
   } as const;
-
+ 
   const btnBase = {
     padding: '6px 12px',
     borderRadius: 6,
@@ -165,7 +218,7 @@ export default function Friends() {
     cursor: 'pointer',
     fontFamily: 'inherit',
   } as const;
-
+ 
   return (
     <div style={{
       height: '100vh', display: 'flex', flexDirection: 'column',
@@ -173,17 +226,21 @@ export default function Friends() {
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
       <Navbar onOpenProfile={() => setProfileOpen(true)} />
-
+ 
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: 680, width: '100%', margin: '0 auto' }}>
-
+ 
         {/* header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ color: '#EEEEEE', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Friends</h1>
           <p style={{ color: '#666', fontSize: 13 }}>
             {friends.length} friends · {onlineCount} online
+            {/* Status indicator */}
+            {isConnected && (
+              <span style={{ marginLeft: 8, fontSize: 11, color: '#50C878' }}>● Live</span>
+            )}
           </p>
         </div>
-
+ 
         {/* add friend */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 12, padding: '18px 20px', marginBottom: 24 }}>
           <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add a friend</p>
@@ -206,7 +263,7 @@ export default function Friends() {
           {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 8 }}>{addError}</p>}
           {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 8 }}>{addSuccess}</p>}
         </div>
-
+ 
         {/* tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #2A2A2A', marginBottom: 20 }}>
           {([
@@ -237,7 +294,7 @@ export default function Friends() {
             </button>
           ))}
         </div>
-
+ 
         {/* ── aba friends ── */}
         {tab === 'friends' && (
           <>
@@ -253,44 +310,58 @@ export default function Friends() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {filteredFriends.map(friend => (
-                  <div key={friend.id} style={cardStyle}>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <UserAvatar name={friend.username} size={40} />
-                      <span style={{ position: 'absolute', bottom: 1, right: 1, width: 10, height: 10, borderRadius: '50%', background: friend.online ? '#50C878' : '#444', border: '2px solid #1A1A1A' }} />
+                {filteredFriends.map(friend => {
+                  const isOnline = getFriendOnlineStatus(friend.id);
+                  return (
+                    <div key={friend.id} style={cardStyle}>
+                      <div style={{ position: 'relative', flexShrink: 0 }}>
+                        <UserAvatar name={friend.username} size={40} />
+                        {/* Badge dinâmico */}
+                        <span style={{ 
+                          position: 'absolute', bottom: 1, right: 1, 
+                          width: 10, height: 10, borderRadius: '50%', 
+                          background: isOnline ? '#50C878' : '#444', 
+                          border: '2px solid #1A1A1A' 
+                        }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{friend.fullName}</p>
+                        <p style={{ color: '#666', fontSize: 12 }}>@{friend.username} · added {friend.addedAt}</p>
+                      </div>
+                      {/* Status dinâmico */}
+                      <span style={{ 
+                        fontSize: 11, fontWeight: 600, 
+                        color: isOnline ? '#50C878' : '#555', 
+                        flexShrink: 0 
+                      }}>
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={() => handleOpenChat(friend.id)}
+                          style={{ ...btnBase, color: '#CCCCCC' }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#555'; e.currentTarget.style.color = '#FFF'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCCCCC'; }}
+                        >
+                          Message
+                        </button>
+                        <button
+                          onClick={() => handleRemoveFriend(friend.id)}
+                          style={{ ...btnBase, color: '#FF6B6B', borderColor: '#3A3A3A' }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#2A1010'; e.currentTarget.style.borderColor = '#FF6B6B44'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#3A3A3A'; }}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ color: '#EEEEEE', fontSize: 14, fontWeight: 600 }}>{friend.fullName}</p>
-                      <p style={{ color: '#666', fontSize: 12 }}>@{friend.username} · added {friend.addedAt}</p>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: friend.online ? '#50C878' : '#555', flexShrink: 0 }}>
-                      {friend.online ? 'Online' : 'Offline'}
-                    </span>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => handleOpenChat(friend.id)}
-                        style={{ ...btnBase, color: '#CCCCCC' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#555'; e.currentTarget.style.color = '#FFF'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#3A3A3A'; e.currentTarget.style.color = '#CCCCCC'; }}
-                      >
-                        Message
-                      </button>
-                      <button
-                        onClick={() => handleRemoveFriend(friend.id)}
-                        style={{ ...btnBase, color: '#FF6B6B', borderColor: '#3A3A3A' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#2A1010'; e.currentTarget.style.borderColor = '#FF6B6B44'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#3A3A3A'; }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
         )}
-
+ 
         {/* ── aba pending ── */}
         {tab === 'pending' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -327,7 +398,7 @@ export default function Friends() {
             ))}
           </div>
         )}
-
+ 
         {/* ── aba sent ── */}
         {tab === 'sent' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -357,9 +428,9 @@ export default function Friends() {
             ))}
           </div>
         )}
-
+ 
       </div>
-
+ 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ChatPanel
         isOpen={chatOpen}

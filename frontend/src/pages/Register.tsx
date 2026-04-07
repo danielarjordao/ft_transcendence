@@ -86,7 +86,7 @@ export default function Register() {
         password: form.password,
         fullName: form.fullName,
       });
-      login(res.accessToken, res.user);
+      login(res.accessToken, res.refreshToken, res.user);
       navigate('/dashboard');
     } catch (err: any) {
       const status = err.response?.status;
