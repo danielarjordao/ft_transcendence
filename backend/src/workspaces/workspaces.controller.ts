@@ -11,16 +11,35 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
+import { InvitationsService } from './invitations.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
 import { InviteMemberDto } from './dto/workspace-invitation.dto';
 import { UpdateMemberRoleDto } from './dto/workspace-member.dto';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Controller('workspaces')
 export class WorkspacesController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(
+    private readonly workspacesService: WorkspacesService,
+    private readonly invitationsService: InvitationsService,
+    private readonly prisma: PrismaService,
+  ) {}
 
+  // Mock endpoint to seed the test user for authentication purposes
+  @Get('seed-test-user')
+  async seedTestUser() {
+    // Acedemos forçosamente ao Prisma para injetar o utilizador
+    return await this.prisma.user.create({
+      data: {
+        id: 'usr_123',
+        email: 'ana.laura@42.fr',
+        fullName: 'Ana Laura',
+        username: 'ana_laura',
+      },
+    });
+  }
   @Post()
   create(@Body() createWorkspaceDto: CreateWorkspaceDto) {
     // TODO: Extract actual userId from JWT
@@ -66,7 +85,10 @@ export class WorkspacesController {
   @Post(':wsId/invitations')
   inviteMember(@Param('wsId') wsId: string, @Body() dto: InviteMemberDto) {
     // TODO: Extract actual userId from JWT to verify admin rights
-    return this.workspacesService.inviteMember('usr_123', wsId, dto);
+    return this.invitationsService.create('usr_123', wsId, {
+      email: dto.email,
+      role: dto.role,
+    });
   }
 
   // Section 3.10
@@ -93,7 +115,6 @@ export class WorkspacesController {
     @Param('memberId') memberId: string,
   ) {
     // TODO: Extract actual userId from JWT to verify admin rights
-    this.workspacesService.removeMember('usr_123', wsId, memberId);
-    return;
+    return this.workspacesService.removeMember('usr_123', wsId, memberId);
   }
 }
