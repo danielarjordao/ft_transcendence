@@ -14,7 +14,7 @@ services:
   backend:
     build:
       context: ./backend
-    command: sh -c "npm install && npx prisma@7.5.0 generate && sleep 3 && npx prisma@7.5.0 db push && npm run start:dev"
+    command: sh -c "npx prisma generate && sleep 3 && npx prisma db push && npm run start:dev"
     container_name: transcendence_backend
     ports:
       - "3000:3000"
