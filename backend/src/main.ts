@@ -22,7 +22,7 @@ async function bootstrap() {
   app.enableCors();
 
   // Start the server on the specified port (default to 3000 if not set in environment variables)
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 
 // Call the bootstrap function to start the server, and catch any errors that occur during startup
