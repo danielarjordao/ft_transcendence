@@ -12,7 +12,7 @@ import { CreateFieldDto } from '../../fields/dto/create-field.dto';
 export class CreateWorkspaceDto {
   @IsString({ message: 'The workspace name must be a string.' })
   @IsNotEmpty({ message: 'The workspace name is required.' })
-  name: string;
+  name!: string;
 
   @IsString()
   @IsOptional()
