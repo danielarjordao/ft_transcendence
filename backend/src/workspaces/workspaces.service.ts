@@ -210,14 +210,17 @@ export class WorkspacesService {
     // Verify admin rights and update member role, ensuring users cannot demote themselves.
     await this.checkAdminRights(userId, wsId);
 
+    // Validate the target role and ensure it's a valid enum value
+    const targetRole = dto.role.toUpperCase() as WorkspaceMemberRole;
+
     // Using strictly the Prisma enum type, matching the API contract
-    if (userId === memberId && dto.role === WorkspaceMemberRole.MEMBER) {
+    if (userId === memberId && targetRole === WorkspaceMemberRole.MEMBER) {
       throw new UnprocessableEntityException('Cannot demote yourself');
     }
 
     const updatedMember = await this.prisma.workspaceMember.update({
       where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
-      data: { role: dto.role as WorkspaceMemberRole },
+      data: { role: targetRole },
     });
 
     return {
@@ -232,8 +235,15 @@ export class WorkspacesService {
       await this.checkAdminRights(userId, wsId);
     }
 
-    await this.prisma.workspaceMember.delete({
-      where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
+    // Removing the member from the workspace will automatically handle related data (like tasks) due to Prisma's referential actions.
+    await this.prisma.task.updateMany({
+      where: {
+        workspaceId: wsId,
+        assigneeId: memberId,
+      },
+      data: {
+        assigneeId: null,
+      },
     });
   }
 }
