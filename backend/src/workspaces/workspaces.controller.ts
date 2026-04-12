@@ -9,6 +9,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
 import { InvitationsService } from './invitations.service';
@@ -17,75 +18,68 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
 import { InviteMemberDto } from './dto/workspace-invitation.dto';
 import { UpdateMemberRoleDto } from './dto/workspace-member.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { ActiveUser } from 'src/common/decorators/active-user.decorator';
 
+// Apply JWT authentication guard to all routes in this controller
+@UseGuards(JwtAuthGuard)
 @Controller('workspaces')
 export class WorkspacesController {
   constructor(
     private readonly workspacesService: WorkspacesService,
     private readonly invitationsService: InvitationsService,
-    private readonly prisma: PrismaService,
   ) {}
 
-  // Mock endpoint to seed the test user for authentication purposes
-  @Get('seed-test-user')
-  async seedTestUser() {
-    // Acedemos forçosamente ao Prisma para injetar o utilizador
-    return await this.prisma.user.create({
-      data: {
-        id: 'usr_123',
-        email: 'ana.laura@42.fr',
-        fullName: 'Ana Laura',
-        username: 'ana_laura',
-      },
-    });
-  }
   @Post()
-  create(@Body() createWorkspaceDto: CreateWorkspaceDto) {
-    // TODO: Extract actual userId from JWT
-    return this.workspacesService.create('usr_123', createWorkspaceDto);
+  create(
+    @ActiveUser('id') userId: string,
+    @Body() createWorkspaceDto: CreateWorkspaceDto,
+  ) {
+    return this.workspacesService.create(userId, createWorkspaceDto);
   }
 
   @Get()
-  findAll(@Query() query: ListWorkspacesQueryDto) {
-    // TODO: Extract actual userId from JWT
-    return this.workspacesService.findAll('usr_123', query);
+  findAll(
+    @ActiveUser('id') userId: string,
+    @Query() query: ListWorkspacesQueryDto,
+  ) {
+    return this.workspacesService.findAll(userId, query);
   }
 
   @Get(':wsId')
-  findOne(@Param('wsId') wsId: string) {
-    // TODO: Extract actual userId from JWT
-    return this.workspacesService.findOne('usr_123', wsId);
+  findOne(@ActiveUser('id') userId: string, @Param('wsId') wsId: string) {
+    return this.workspacesService.findOne(userId, wsId);
   }
 
   @Patch(':wsId')
   update(
+    @ActiveUser('id') userId: string,
     @Param('wsId') wsId: string,
     @Body() updateWorkspaceDto: UpdateWorkspaceDto,
   ) {
-    // TODO: Extract actual userId from JWT
-    return this.workspacesService.update('usr_123', wsId, updateWorkspaceDto);
+    return this.workspacesService.update(userId, wsId, updateWorkspaceDto);
   }
 
   @Delete(':wsId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('wsId') wsId: string) {
-    // TODO: Extract actual userId from JWT
-    return this.workspacesService.remove('usr_123', wsId);
+  remove(@ActiveUser('id') userId: string, @Param('wsId') wsId: string) {
+    return this.workspacesService.remove(userId, wsId);
   }
 
   // Section 3.6
   @Get(':wsId/members')
-  listMembers(@Param('wsId') wsId: string) {
-    // TODO: Extract actual userId from JWT to verify access
-    return this.workspacesService.listMembers('usr_123', wsId);
+  listMembers(@ActiveUser('id') userId: string, @Param('wsId') wsId: string) {
+    return this.workspacesService.listMembers(userId, wsId);
   }
 
   // Section 3.7
   @Post(':wsId/invitations')
-  inviteMember(@Param('wsId') wsId: string, @Body() dto: InviteMemberDto) {
-    // TODO: Extract actual userId from JWT to verify admin rights
-    return this.invitationsService.create('usr_123', wsId, {
+  inviteMember(
+    @ActiveUser('id') userId: string,
+    @Param('wsId') wsId: string,
+    @Body() dto: InviteMemberDto,
+  ) {
+    return this.invitationsService.create(userId, wsId, {
       email: dto.email,
       role: dto.role,
     });
@@ -94,27 +88,22 @@ export class WorkspacesController {
   // Section 3.10
   @Patch(':wsId/members/:memberId')
   updateMemberRole(
+    @ActiveUser('id') userId: string,
     @Param('wsId') wsId: string,
     @Param('memberId') memberId: string,
     @Body() dto: UpdateMemberRoleDto,
   ) {
-    // TODO: Extract actual userId from JWT to verify admin rights
-    return this.workspacesService.updateMemberRole(
-      'usr_123',
-      wsId,
-      memberId,
-      dto,
-    );
+    return this.workspacesService.updateMemberRole(userId, wsId, memberId, dto);
   }
 
   // Section 3.11
   @Delete(':wsId/members/:memberId')
   @HttpCode(HttpStatus.NO_CONTENT)
   removeMember(
+    @ActiveUser('id') userId: string,
     @Param('wsId') wsId: string,
     @Param('memberId') memberId: string,
   ) {
-    // TODO: Extract actual userId from JWT to verify admin rights
-    return this.workspacesService.removeMember('usr_123', wsId, memberId);
+    return this.workspacesService.removeMember(userId, wsId, memberId);
   }
 }

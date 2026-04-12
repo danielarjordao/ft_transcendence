@@ -230,20 +230,46 @@ export class WorkspacesService {
   }
 
   async removeMember(userId: string, wsId: string, memberId: string) {
-    // Verify admin/self and delete.
+    // Allow self-removal; otherwise require admin/owner privileges.
     if (userId !== memberId) {
       await this.checkAdminRights(userId, wsId);
     }
 
-    // Removing the member from the workspace will automatically handle related data (like tasks) due to Prisma's referential actions.
-    await this.prisma.task.updateMany({
-      where: {
-        workspaceId: wsId,
-        assigneeId: memberId,
-      },
-      data: {
-        assigneeId: null,
-      },
+    // Ensure the target user is actually a member of this workspace.
+    const targetMembership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
+    });
+
+    if (!targetMembership) {
+      throw new NotFoundException('Member not found in this workspace');
+    }
+
+    // Protect workspace ownership: only the owner can remove themselves.
+    if (
+      targetMembership.role === WorkspaceMemberRole.OWNER &&
+      userId !== memberId
+    ) {
+      throw new ForbiddenException('Owner cannot be removed from workspace');
+    }
+
+    // Keep data consistent in one atomic operation:
+    // Unassign tasks that currently point to this member.
+    // Remove the workspace membership record.
+    // If any step fails, Prisma rolls back the whole transaction.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.updateMany({
+        where: {
+          workspaceId: wsId,
+          assigneeId: memberId,
+        },
+        data: {
+          assigneeId: null,
+        },
+      });
+
+      await tx.workspaceMember.delete({
+        where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
+      });
     });
   }
 }
