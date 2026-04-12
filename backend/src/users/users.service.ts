@@ -158,7 +158,13 @@ export class UsersService {
       },
     });
 
-    return users;
+    return users.map((user) => {
+      const { isOnline, ...rest } = user;
+      return {
+        ...rest,
+        status: isOnline ? 'online' : 'offline',
+      };
+    });
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
