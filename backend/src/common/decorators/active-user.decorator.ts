@@ -1,27 +1,27 @@
-import {
-  createParamDecorator,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { ActiveUserDto, RequestWithUser } from './dto/active-user.dto';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ActiveUserDto } from '../decorators/interfaces/active-user.interface';
 
-// Exposes the authenticated user (or a specific field) from the request object.
-export const ActiveUser = createParamDecorator(
-  (field: keyof ActiveUserDto | undefined, ctx: ExecutionContext) => {
-    const request = ctx.switchToHttp().getRequest<RequestWithUser>();
-    const user = request.user;
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  handleRequest<TUser = ActiveUserDto>(
+    err: unknown,
+    user: unknown,
+    info: unknown,
+  ): TUser {
+    if (err || !user) {
+      // Check if 'err' is an instance of Error and throw it directly if it is.
+      // This allows NestJS to handle it properly and return the correct HTTP response.
+      if (err instanceof Error) {
+        throw err;
+      }
 
-    // Fail fast if this decorator is used on a route without authentication context.
-    if (!user) {
-      throw new UnauthorizedException('User not authenticated');
+      const message =
+        info instanceof Error ? info.message : 'User not authenticated';
+
+      throw new UnauthorizedException(message);
     }
 
-    // If a field is requested, return only that value (e.g., @ActiveUser('id')).
-    if (field) {
-      return user[field];
-    }
-
-    // TODO: Review if returning the full user object should be restricted in some controllers.
-    return user;
-  },
-);
+    return user as TUser;
+  }
+}
