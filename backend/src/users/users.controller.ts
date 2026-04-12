@@ -6,10 +6,15 @@ import {
   Param,
   Query,
   Post,
+  Req,
+  UnauthorizedException,
+  UseGuards,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
@@ -17,6 +22,16 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  private getUserId(request: RequestWithUser): string {
+    const userId = request.user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    return userId;
+  }
 
   // Static and Search Routes first
   @Get()
@@ -26,30 +41,45 @@ export class UsersController {
 
   // Exact match 'me' routes
   @Get('me')
-  getMe() {
-    // TODO: Extract actual userId from the JWT request object
-    return this.usersService.getMe('usr_123');
+  @UseGuards(JwtAuthGuard)
+  getMe(@Req() req: RequestWithUser) {
+    return this.usersService.getMe(this.getUserId(req));
   }
 
   @Patch('me')
-  updateProfile(@Body() updateProfileDto: UpdateProfileDto) {
-    // TODO: Extract actual userId from the JWT request object
-    return this.usersService.updateProfile('usr_123', updateProfileDto);
+  @UseGuards(JwtAuthGuard)
+  updateProfile(
+    @Req() req: RequestWithUser,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    return this.usersService.updateProfile(
+      this.getUserId(req),
+      updateProfileDto,
+    );
   }
 
   @Patch('me/preferences')
-  updatePreferences(@Body() updatePreferencesDto: UpdatePreferencesDto) {
-    // TODO: Extract actual userId from the JWT request object
-    return this.usersService.updatePreferences('usr_123', updatePreferencesDto);
+  @UseGuards(JwtAuthGuard)
+  updatePreferences(
+    @Req() req: RequestWithUser,
+    @Body() updatePreferencesDto: UpdatePreferencesDto,
+  ) {
+    return this.usersService.updatePreferences(
+      this.getUserId(req),
+      updatePreferencesDto,
+    );
   }
 
   // File upload routes
   @Post('avatar')
+  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
-  uploadAvatar(@UploadedFile() file: Express.Multer.File) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    // TODO: Add strict validation for file type (JPG/PNG) and size (5MB) using a Pipe
-    return this.usersService.uploadAvatar('usr_123', file);
+  uploadAvatar(
+    @Req() req: RequestWithUser,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    // TODO: Add strict validation for file type (JPG/PNG) and size (5MB) using a Pipe.
+    return this.usersService.uploadAvatar(this.getUserId(req), file);
   }
 
   // 4. Dynamic/Parameter routes MUST be last
