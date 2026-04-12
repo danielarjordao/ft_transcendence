@@ -12,7 +12,7 @@ export default function OAuthCallback() {
     const token = params.get('token');
     if (!token) { navigate('/login'); return; }
     authService.getMe().then((user) => {
-      login(token, user);
+      login(token, '', user);
       navigate('/dashboard');
     }).catch(() => navigate('/login'));
   }, []);

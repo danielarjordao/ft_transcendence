@@ -1,44 +1,44 @@
 services:
-  db: # PostgreSQL database service
-    image: postgres:15-alpine # Official PostgreSQL image
-    container_name: transcendence_db # Container name
+  db:
+    image: postgres:15-alpine
+    container_name: transcendence_db
     ports:
-      - "5432:5432" # Default PostgreSQL port
+      - "5432:5432"
     environment:
-      POSTGRES_USER: transcendence_user # Database user
-      POSTGRES_PASSWORD: transcendence_password # Database password
-      POSTGRES_DB: transcendence_db # Database name
+      POSTGRES_USER: transcendence_user
+      POSTGRES_PASSWORD: transcendence_password
+      POSTGRES_DB: transcendence_db
     volumes:
-      - pgdata:/var/lib/postgresql/data # Volume for data persistence
+      - pgdata:/var/lib/postgresql/data
 
-  backend: # Backend service (NestJS)
+  backend:
     build:
-      context: ./backend # Backend code directory
-    command: sh -c "sleep 3 && npx prisma db push && npm run start:dev" # Waits for the database, applies migrations, and starts the server
-    container_name: transcendence_backend # Container name
+      context: ./backend
+    command: sh -c "npx prisma generate && sleep 3 && npx prisma db push && npm run start:dev"
+    container_name: transcendence_backend
     ports:
-      - "3000:3000" # API port
+      - "3000:3000"
     volumes:
-      - ./backend:/app # Mounts local code into the container
-      - /app/node_modules # Ensures container's node_modules
+      - ./backend:/app
+      - /app/node_modules
     environment:
-      DATABASE_URL: "postgresql://transcendence_user:transcendence_password@db:5432/transcendence_db?schema=public" # Database connection URL
+      DATABASE_URL: "postgresql://transcendence_user:transcendence_password@db:5432/transcendence_db?schema=public"
     depends_on:
-      - db # Starts only after the database is ready
+      - db
 
-  frontend: # Frontend service (React)
+  frontend:
     build:
-      context: ./frontend # Frontend code directory
-    container_name: transcendence_frontend # Container name
+      context: ./frontend
+    container_name: transcendence_frontend
     ports:
-      - "5173:5173" # Frontend port (Vite)
+      - "5173:5173"
     volumes:
-      - ./frontend:/app # Mounts local code into the container
-      - /app/node_modules # Ensures container's node_modules
+      - ./frontend:/app
+      - /app/node_modules
     environment:
-      VITE_API_URL: "http://backend:3000" # API URL for the frontend
+      VITE_API_URL: "http://localhost:3000"
     depends_on:
-      - backend # Starts only after the backend is ready
+      - backend
 
 volumes:
-  pgdata: # Named volume for database persistence
+  pgdata:

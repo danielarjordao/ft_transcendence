@@ -10,5 +10,6 @@ dist/
 .codex/
 .devcontainer/
 docker-compose-explicacao.md
+package-lock-explicacao.md
 
 node_modules/

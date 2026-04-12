@@ -3,21 +3,25 @@ import type { LoginRequest, RegisterRequest, AuthResponse, User } from '../types
 
 export const authService = {
   async login(data: LoginRequest): Promise<AuthResponse> {
-    const res = await api.post<AuthResponse>('/api/auth/login', data);
+    // TODO: backend integration — POST /auth/sign-in
+    const res = await api.post<AuthResponse>('/auth/sign-in', data);
     return res.data;
   },
 
   async register(data: Omit<RegisterRequest, 'confirmPassword'>): Promise<AuthResponse> {
-    const res = await api.post<AuthResponse>('/api/auth/register', data);
+    // TODO: backend integration — POST /auth/sign-up
+    const res = await api.post<AuthResponse>('/auth/sign-up', data);
     return res.data;
   },
 
   async getMe(): Promise<User> {
-    const res = await api.get<User>('/api/users/me');
+    // TODO: backend integration — GET /users/me
+    const res = await api.get<User>('/users/me');
     return res.data;
   },
 
-  logout() {
-    localStorage.removeItem('accessToken');
+  async logout(refreshToken: string): Promise<void> {
+    // TODO: backend integration — POST /auth/logout
+    await api.post('/auth/logout', { refreshToken });
   },
 };

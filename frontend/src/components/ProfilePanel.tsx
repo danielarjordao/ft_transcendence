@@ -185,7 +185,7 @@ function Field({
 
 // ── Profile View ──────────────────────────────────────────────────────────────
 function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
-  const joined = new Date(user.createdAt).toLocaleDateString('en-US', {
+  const joined = new Date(user.createdAt ?? Date.now()).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
   return (
