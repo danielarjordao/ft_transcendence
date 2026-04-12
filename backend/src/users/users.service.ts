@@ -16,17 +16,32 @@ export class UsersService {
 
   async getMe(userId: string) {
     // `findUnique` translates to a SQL query that looks for a single record based on unique criteria.
-    // For example: `SELECT * FROM "User" WHERE id = $1 LIMIT 1`.
+    // The `select` object specifies which fields to retrieve from the database.
+    // This is crucial for security, as it prevents sensitive information (like password hashes) from being accidentally exposed.
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        username: true,
+        bio: true,
+        avatarUrl: true,
+        accountType: true,
+        preferences: true,
+        isOnline: true,
+        twoFactorEnabled: true,
+        createdAt: true,
+      },
     });
 
+    // If no user is found with the given ID, a NotFoundException is thrown, which results in a 404 HTTP response.
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    // First, we must ensure the new username doesn't belong to someone else.
+    // First, it checks if the user exists by calling `getMe`. If the user does not exist, `getMe` will throw a NotFoundException.
     if (dto.username) {
       const existingUser = await this.prisma.user.findUnique({
         where: { username: dto.username },
@@ -48,6 +63,14 @@ export class UsersService {
         fullName: dto.fullName,
         bio: dto.bio,
       },
+      // 'select' is used here to specify which fields to return after the update operation.
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        bio: true,
+        avatarUrl: true,
+      },
     });
 
     return updatedUser;
@@ -55,14 +78,15 @@ export class UsersService {
 
   async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
     // Prisma treats JSON columns as standard JavaScript objects.
-    // To update nested JSON structures, we first fetch the current state,
-    // merge the new values in memory, and send the complete object back to the database.
+    // To update nested JSON structures, It is necessary to first retrieve the existing JSON data, merge it with the new values in memory,
+    // and then send the complete object back to the database for updating.
     const user = await this.getMe(userId);
 
     // Asserting the type to deal with Prisma's JSON value type safety
     const currentPrefs = (user.preferences as UpdatePreferencesDto) || {};
     const currentNotifs = currentPrefs.notifications || {};
 
+    // Merging the existing preferences with the new values from the DTO. This ensures that only the provided fields are updated, while the rest remain unchanged.
     const mergedPreferences = {
       ...currentPrefs,
       theme: dto.theme || currentPrefs.theme,
