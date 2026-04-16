@@ -8,7 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
-import { Prisma } from '../generated/prisma/client';
+import {
+  Prisma,
+  TaskPriority as PrismaTaskPriority,
+} from '../generated/prisma/client';
 import { TaskWithRelations } from './interfaces/task-relations.type';
 
 @Injectable()
@@ -53,7 +56,7 @@ export class TasksService {
       workspaceId: task.workspaceId,
       title: task.title,
       description: task.description,
-      priority: task.priority,
+      priority: task.priority?.toLowerCase() || 'medium',
       status: task.field?.name?.toLowerCase().replace(/\s+/g, '_') || 'unknown',
       subject: task.subject
         ? {
@@ -96,7 +99,9 @@ export class TasksService {
         fieldId: fieldId,
         subjectId: dto.subjectId,
         assigneeId: dto.assigneeId,
-        priority: dto.priority,
+        priority: dto.priority
+          ? (dto.priority.toUpperCase() as PrismaTaskPriority)
+          : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       },
       include: {
@@ -131,7 +136,9 @@ export class TasksService {
     const whereClause: Prisma.TaskWhereInput = {
       workspaceId: wsId,
       title: search ? { contains: search, mode: 'insensitive' } : undefined,
-      priority: priority,
+      priority: priority
+        ? (priority.toUpperCase() as PrismaTaskPriority)
+        : undefined,
       subjectId: subject,
       assigneeId: assignee,
       fieldId: status ? await this.getFieldIdByStatus(wsId, status) : undefined,
@@ -202,7 +209,9 @@ export class TasksService {
         fieldId: newFieldId,
         subjectId: dto.subjectId,
         assigneeId: dto.assigneeId,
-        priority: dto.priority,
+        priority: dto.priority
+          ? (dto.priority.toUpperCase() as PrismaTaskPriority)
+          : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
       include: {
