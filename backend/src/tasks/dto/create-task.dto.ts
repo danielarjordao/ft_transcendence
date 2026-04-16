@@ -5,18 +5,12 @@ import {
   IsEnum,
   IsDateString,
 } from 'class-validator';
-
-// Enum to define allowed priority levels
-export enum TaskPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-}
+import { TaskPriority } from '../../generated/prisma/client';
 
 export class CreateTaskDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsOptional()
@@ -28,7 +22,7 @@ export class CreateTaskDto {
 
   @IsString()
   @IsNotEmpty()
-  status: string;
+  status!: string;
 
   @IsString()
   @IsOptional()

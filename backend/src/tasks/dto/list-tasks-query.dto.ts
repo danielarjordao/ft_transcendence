@@ -7,7 +7,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { TaskPriority } from './create-task.dto';
+import { TaskPriority } from '../../generated/prisma/client'; // <-- IMPORT CORRIGIDO
 
 export enum TaskSortOrder {
   ASC = 'asc',

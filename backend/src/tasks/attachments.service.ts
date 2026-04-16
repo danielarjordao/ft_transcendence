@@ -1,62 +1,54 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { TasksService } from './tasks.service';
-
-type MockAttachment = {
-  id: string;
-  taskId: string;
-  name: string;
-  size: number;
-  type: string;
-  url: string;
-  createdAt: Date;
-};
 
 @Injectable()
 export class AttachmentsService {
-  private attachments: MockAttachment[] = [];
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tasksService: TasksService,
+  ) {}
 
-  constructor(private readonly tasksService: TasksService) {}
-
-  listByTask(taskId: string) {
-    this.tasksService.findOne(taskId);
-    // TODO: Replace with Prisma findMany — filter by taskId
-    return this.attachments.filter((a) => a.taskId === taskId);
+  async listByTask(userId: string, taskId: string) {
+    await this.tasksService.findOne(userId, taskId);
+    return await this.prisma.attachment.findMany({ where: { taskId } });
   }
 
-  upload(taskId: string, files: Express.Multer.File[]) {
-    this.tasksService.findOne(taskId);
+  async upload(userId: string, taskId: string, files: Express.Multer.File[]) {
+    await this.tasksService.findOne(userId, taskId);
 
-    const newAttachments: MockAttachment[] = (files || []).map(
-      (file, index) => ({
-        id: `att_${Date.now()}_${index}`,
-        taskId,
-        name: file.originalname,
-        size: file.size,
-        type: file.mimetype,
-        url: `https://mock-url.com/${file.originalname}`,
-        createdAt: new Date(),
-      }),
-    );
+    const data = files.map((file) => ({
+      taskId,
+      uploaderId: userId,
+      fileName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      storageKey: `mock-s3-key-${Date.now()}-${file.originalname}`, // TODO: Upload Real S3
+    }));
 
-    this.attachments.push(...newAttachments);
-    return newAttachments;
+    await this.prisma.attachment.createMany({ data });
+
+    return await this.prisma.attachment.findMany({
+      where: { taskId, uploaderId: userId },
+      orderBy: { createdAt: 'desc' },
+      take: files.length,
+    });
   }
 
-  getById(attachmentId: string) {
-    // TODO: Search in Prisma by attachmentId, join with task to verify workspace membership (throw 403 if not).
-    // TODO: Return attachment metadata + pre-signed URL for download if using S3.
-    const attachment = this.attachments.find((a) => a.id === attachmentId);
-    if (!attachment)
-      throw new NotFoundException(`Attachment ${attachmentId} not found`);
+  async getById(userId: string, attachmentId: string) {
+    const attachment = await this.prisma.attachment.findUnique({
+      where: { id: attachmentId },
+    });
+    if (!attachment) throw new NotFoundException('Attachment not found');
+
+    await this.tasksService.findOne(userId, attachment.taskId);
+
     return attachment;
   }
 
-  remove(attachmentId: string) {
-    // TODO: Replace with Prisma delete — verify caller is workspace member.
-    // TODO: Emit WS event 'attachment_deleted' to 'workspace:{wsId}'.
-    const index = this.attachments.findIndex((a) => a.id === attachmentId);
-    if (index === -1)
-      throw new NotFoundException(`Attachment ${attachmentId} not found`);
-    this.attachments.splice(index, 1);
+  async remove(userId: string, attachmentId: string) {
+    const attachment = await this.getById(userId, attachmentId);
+
+    await this.prisma.attachment.delete({ where: { id: attachment.id } });
   }
 }
