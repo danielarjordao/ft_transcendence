@@ -2,8 +2,8 @@ import { IsString, IsHexColor } from 'class-validator';
 
 export class CreateFieldDto {
   @IsString()
-  name: string;
+  name!: string;
 
   @IsHexColor()
-  color: string;
+  color!: string;
 }
