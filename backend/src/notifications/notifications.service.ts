@@ -1,78 +1,86 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class NotificationsService {
-  // TODO: Remove mock array when Prisma is integrated.
-  // Data structure aligned with Section 8 of the API Contract.
-  private notifications = [
-    {
-      id: 'ntf_1',
-      type: 'task_assigned',
-      title: 'Nova tarefa atribuída',
-      message: 'Foste atribuído à tarefa "Configurar Docker".',
-      read: false,
-      resource: {
-        kind: 'task',
-        id: 'task_123',
-        workspaceId: 'ws_1',
-      },
-      createdAt: new Date(),
-    },
-    {
-      id: 'ntf_2',
-      type: 'workspace_invite',
-      title: 'Convite de Workspace',
-      message: 'Tens um convite para o workspace "Transcendence".',
-      read: true,
-      resource: {
-        kind: 'workspace',
-        id: 'ws_456',
-        workspaceId: 'ws_456',
-      },
-      createdAt: new Date(),
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll(userId: string) {
-    // TODO: Use Prisma to fetch notifications for this user (where userId matches).
-    // TODO: Implement pagination (limit, offset) and query filters (e.g., ?read=false) based on the API Contract.
-    // TODO: Remove console.log and return actual data from the database.
-    console.log(`Fetching notifications for user ${userId}`);
-    return this.notifications;
+  async findAll(userId: string) {
+    const notifications = await this.prisma.notification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return notifications.map((n) => ({
+      id: n.id,
+      type: n.type.toLowerCase(),
+      title: n.title,
+      message: n.message,
+      read: n.isRead,
+      resource: n.resource,
+      createdAt: n.createdAt,
+    }));
   }
 
-  getUnreadCount(userId: string) {
-    // TODO: Use Prisma 'count' to get the number of notifications where userId matches and read === false.
-    // TODO: Remove console.log and return actual count from the database.
-    console.log(`Counting unread notifications for user ${userId}`);
-    const count = this.notifications.filter((n) => !n.read).length;
+  async getUnreadCount(userId: string) {
+    const count = await this.prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+
     return { count };
   }
 
-  markAllAsRead(userId: string) {
-    // TODO: Use Prisma 'updateMany' to set read = true for all unread notifications belonging to this user.
-    // TODO: Remove console.log and perform actual database update.
-    console.log(`Marking all notifications as read for user ${userId}`);
-    this.notifications.forEach((n) => (n.read = true));
+  async markAllAsRead(userId: string) {
+    await this.prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+
     return { updated: true };
   }
 
-  update(id: string, readStatus: boolean) {
-    // TODO: Use Prisma to fetch the notification and verify ownership (notification.userId === userId).
-    // TODO: Update the 'read' status in the database.
-    const notif = this.notifications.find((n) => n.id === id);
+  async update(userId: string, id: string, readStatus: boolean) {
+    const notif = await this.prisma.notification.findUnique({ where: { id } });
+
     if (!notif) throw new NotFoundException('Notification not found');
 
-    notif.read = readStatus;
-    return notif;
+    if (notif.userId !== userId) {
+      throw new ForbiddenException(
+        'You can only update your own notifications',
+      );
+    }
+
+    const updatedNotif = await this.prisma.notification.update({
+      where: { id },
+      data: { isRead: readStatus },
+    });
+
+    return {
+      id: updatedNotif.id,
+      type: updatedNotif.type.toLowerCase(),
+      title: updatedNotif.title,
+      message: updatedNotif.message,
+      read: updatedNotif.isRead,
+      resource: updatedNotif.resource,
+      createdAt: updatedNotif.createdAt,
+    };
   }
 
-  remove(id: string) {
-    // TODO: Use Prisma to fetch the notification and verify ownership (notification.userId === userId).
-    // TODO: Delete the record from the database.
-    const index = this.notifications.findIndex((n) => n.id === id);
-    if (index === -1) throw new NotFoundException('Notification not found');
+  async remove(userId: string, id: string) {
+    const notif = await this.prisma.notification.findUnique({ where: { id } });
 
-    this.notifications.splice(index, 1);
+    if (!notif) throw new NotFoundException('Notification not found');
+
+    if (notif.userId !== userId) {
+      throw new ForbiddenException(
+        'You can only delete your own notifications',
+      );
+    }
+
+    await this.prisma.notification.delete({ where: { id } });
   }
 }

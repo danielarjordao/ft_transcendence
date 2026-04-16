@@ -7,44 +7,58 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  Req,
+  UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
+import { UpdateNotificationDto } from './dto/notification.dto';
 
-@Controller()
+@UseGuards(JwtAuthGuard)
+@Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
-  @Get('notifications')
-  findAll() {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    return this.notificationsService.findAll('usr_123');
+  private getUserId(request: RequestWithUser): string {
+    const userId = request.user?.id;
+    if (!userId) throw new UnauthorizedException('User not authenticated');
+    return userId;
   }
 
-  @Get('notifications/unread-count')
-  getUnreadCount() {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    return this.notificationsService.getUnreadCount('usr_123');
+  @Get()
+  findAll(@Req() req: RequestWithUser) {
+    const userId = this.getUserId(req);
+    return this.notificationsService.findAll(userId);
   }
 
-  @Patch('notifications/read-all')
-  markAllAsRead() {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    return this.notificationsService.markAllAsRead('usr_123');
+  @Get('unread-count')
+  getUnreadCount(@Req() req: RequestWithUser) {
+    const userId = this.getUserId(req);
+    return this.notificationsService.getUnreadCount(userId);
   }
 
-  @Patch('notifications/:id')
-  update(@Param('id') id: string, @Body('read') read: boolean) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    // TODO: Pass the userId to the service to ensure ownership validation
-    return this.notificationsService.update(id, read);
+  @Patch('read-all')
+  markAllAsRead(@Req() req: RequestWithUser) {
+    const userId = this.getUserId(req);
+    return this.notificationsService.markAllAsRead(userId);
   }
 
-  // Added to match API Contract Section 6.8 (204 No Content instead of 200 OK)
-  @Delete('notifications/:id')
+  @Patch(':id')
+  update(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateNotificationDto,
+  ) {
+    const userId = this.getUserId(req);
+    return this.notificationsService.update(userId, id, dto.read);
+  }
+
+  @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id') id: string) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    // TODO: Pass the userId to the service to ensure ownership validation
-    this.notificationsService.remove(id);
+  remove(@Req() req: RequestWithUser, @Param('id') id: string) {
+    const userId = this.getUserId(req);
+    return this.notificationsService.remove(userId, id);
   }
 }
