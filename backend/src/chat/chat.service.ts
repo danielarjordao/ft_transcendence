@@ -1,89 +1,115 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { SendMessageDto } from './dto/chat.dto';
 
 @Injectable()
 export class ChatService {
-  // TODO: Remove these mock arrays once Prisma is integrated.
+  constructor(private readonly prisma: PrismaService) {}
 
-  // Data structure aligned with Section 8 (Conversation Preview Object) of the API Contract.
-  private conversations = [
-    {
-      user: {
-        id: 'usr_456',
-        username: 'lucas_dev',
-        fullName: 'Lucas Silva',
-        avatarUrl: null,
-        status: 'online',
+  async getConversations(userId: string, limit?: number, offset?: number) {
+    const partners = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { sentMessages: { some: { receiverId: userId } } },
+          { receivedMessages: { some: { senderId: userId } } },
+        ],
       },
-      lastMessage: {
-        id: 'msg_2',
-        text: 'Já configuraste o Docker?',
-        createdAt: new Date(),
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        avatarUrl: true,
+        isOnline: true,
       },
-      unreadCount: 2,
-    },
-  ];
+      take: limit ? Number(limit) : 20,
+      skip: offset ? Number(offset) : 0,
+    });
 
-  private messages = [
-    {
-      id: 'm1',
-      senderId: 'usr_456',
-      receiverId: 'usr_123',
-      text: 'Olá a todos no projeto!',
-      createdAt: new Date(),
-      readAt: new Date(),
-    },
-    {
-      id: 'msg_2',
-      senderId: 'usr_123',
-      receiverId: 'usr_456',
-      text: 'Já configuraste o Docker?',
-      createdAt: new Date(),
-      readAt: null,
-    },
-  ];
+    const conversations = await Promise.all(
+      partners.map(async (partner) => {
+        const lastMessage = await this.prisma.message.findFirst({
+          where: {
+            OR: [
+              { senderId: userId, receiverId: partner.id },
+              { senderId: partner.id, receiverId: userId },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, text: true, createdAt: true },
+        });
 
-  getConversations(userId: string) {
-    // TODO: Use Prisma to fetch 1:1 conversation previews where userId is a participant.
-    // TODO: Group by friend, fetch the latest message for 'lastMessage', and count unread messages for 'unreadCount'.
-    // TODO: Apply pagination using limit and offset.
-    console.log(`Fetching conversations for user ${userId}`);
-    return this.conversations;
+        const unreadCount = await this.prisma.message.count({
+          where: {
+            senderId: partner.id,
+            receiverId: userId,
+            readAt: null,
+          },
+        });
+
+        return {
+          user: {
+            ...partner,
+            status: partner.isOnline ? 'online' : 'offline',
+          },
+          lastMessage,
+          unreadCount,
+        };
+      }),
+    );
+
+    return conversations.sort(
+      (a, b) =>
+        (b.lastMessage?.createdAt.getTime() || 0) -
+        (a.lastMessage?.createdAt.getTime() || 0),
+    );
   }
 
-  getMessages(userId: string, friendId: string) {
-    // TODO: Use Prisma to fetch messages between userId and friendId (using OR conditions).
-    // TODO: Order by createdAt and apply pagination (limit, offset).
-    return this.messages
-      .filter(
-        (m) =>
-          (m.senderId === userId && m.receiverId === friendId) ||
-          (m.senderId === friendId && m.receiverId === userId),
-      )
-      .map(({ id, senderId, text, createdAt, readAt }) => ({
-        id,
-        senderId,
-        text,
-        createdAt,
-        readAt,
-      })); // Omitting receiverId to match API Contract Section 6.2
+  async getMessages(
+    userId: string,
+    friendId: string,
+    limit?: number,
+    offset?: number,
+  ) {
+    await this.prisma.message.updateMany({
+      where: { senderId: friendId, receiverId: userId, readAt: null },
+      data: { readAt: new Date() },
+    });
+
+    const messages = await this.prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit ? Number(limit) : 50,
+      skip: offset ? Number(offset) : 0,
+    });
+
+    return messages.map(({ id, senderId, text, createdAt, readAt }) => ({
+      id,
+      senderId,
+      text,
+      createdAt,
+      readAt,
+    }));
   }
 
-  sendMessage(userId: string, dto: SendMessageDto) {
-    // TODO: Use Prisma to insert a new message record into the database.
-    // TODO: Trigger a Socket.io event ('receive_message') to 'user:{dto.toUserId}' for real-time delivery (API Contract Sec 7.4).
-    const newMsg = {
-      id: `msg_${Date.now()}`,
-      senderId: userId,
-      receiverId: dto.toUserId,
-      text: dto.text,
-      createdAt: new Date(),
-      readAt: null,
-    };
+  async sendMessage(userId: string, dto: SendMessageDto) {
+    const receiver = await this.prisma.user.findUnique({
+      where: { id: dto.toUserId },
+    });
+    if (!receiver) throw new NotFoundException('Destinatário não encontrado');
 
-    this.messages.push(newMsg);
+    const newMsg = await this.prisma.message.create({
+      data: {
+        senderId: userId,
+        receiverId: dto.toUserId,
+        text: dto.text,
+      },
+    });
 
-    // Exact return format expected by Section 6.3
     return {
       id: newMsg.id,
       senderId: newMsg.senderId,

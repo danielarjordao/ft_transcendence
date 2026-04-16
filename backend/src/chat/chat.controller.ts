@@ -1,42 +1,58 @@
-import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
 import { ChatService } from './chat.service';
-import { SendMessageDto } from './dto/chat.dto';
+import { SendMessageDto, ChatQueryDto } from './dto/chat.dto';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
+@UseGuards(JwtAuthGuard)
 @Controller()
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
-  @Get('conversations')
-  getConversations(
-    @Query('limit') limit: number,
-    @Query('offset') offset: number,
-  ) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    // TODO: Pass limit and offset to the service to implement pagination (API Contract Sec 6.1)
-    // TODO: Remove console.log and return actual conversations from the database.
-    console.log(
-      `Fetching conversations for user usr_123 with limit ${limit} and offset ${offset}`,
-    );
-    return this.chatService.getConversations('usr_123');
+  private getUserId(request: RequestWithUser): string {
+    const userId = request.user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User not authenticated');
+    }
+
+    return userId;
   }
+
+  @Get('conversations')
+  getConversations(@Req() req: RequestWithUser, @Query() query: ChatQueryDto) {
+    const userId = this.getUserId(req);
+    return this.chatService.getConversations(userId, query.limit, query.offset);
+  }
+
   @Get('messages/:friendId')
   getMessages(
+    @Req() req: RequestWithUser,
     @Param('friendId') friendId: string,
-    @Query('limit') limit: number,
-    @Query('offset') offset: number,
+    @Query() query: ChatQueryDto,
   ) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    // TODO: Pass limit and offset to the service to implement pagination (API Contract Sec 6.2)
-    // TODO: Remove console.log and return actual messages from the database.
-    console.log(
-      `Fetching messages between user usr_123 and friend ${friendId} with limit ${limit} and offset ${offset}`,
+    const userId = this.getUserId(req);
+    return this.chatService.getMessages(
+      userId,
+      friendId,
+      query.limit,
+      query.offset,
     );
-    return this.chatService.getMessages('usr_123', friendId);
   }
 
   @Post('messages')
-  sendMessage(@Body() dto: SendMessageDto) {
-    // TODO: Extract actual userId from the JWT request object (e.g., @Req() req)
-    return this.chatService.sendMessage('usr_123', dto);
+  sendMessage(@Req() req: RequestWithUser, @Body() dto: SendMessageDto) {
+    const userId = this.getUserId(req);
+    return this.chatService.sendMessage(userId, dto);
   }
 }
