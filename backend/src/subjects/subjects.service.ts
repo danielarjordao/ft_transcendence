@@ -6,18 +6,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
-import { Prisma } from '../generated/prisma/client';
+import { UpdateSubjectDto } from './dto/update-subject.dto';
+import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client'; // <-- Enum Tipado
 
 @Injectable()
 export class SubjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Ensures only Admins or Owners can modify workspace configurations.
-  private async checkAdminRights(userId: string, workspaceId: string) {
+  private async checkMembership(userId: string, workspaceId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId },
-      },
+      where: { workspaceId_userId: { workspaceId, userId } },
     });
 
     if (!membership) {
@@ -25,22 +23,23 @@ export class SubjectsService {
         'Workspace not found or you are not a member',
       );
     }
+    return membership;
+  }
 
-    // Direct string comparison avoids TypeScript runtime resolution errors
-    // when dealing with generated Enums from external folders.
-    if (membership.role === 'MEMBER') {
+  private async checkAdminRights(userId: string, workspaceId: string) {
+    const membership = await this.checkMembership(userId, workspaceId);
+
+    if (membership.role === WorkspaceMemberRole.MEMBER) {
       throw new ForbiddenException(
         'Admin access required to configure subjects',
       );
     }
-
     return membership;
   }
 
-  async findAll(workspaceId: string) {
-    // Retrieves all subjects belonging to a specific workspace.
-    // The results are explicitly ordered by the 'position' field to maintain
-    // the visual layout defined by the API contract.
+  async findAll(userId: string, workspaceId: string) {
+    await this.checkMembership(userId, workspaceId);
+
     return await this.prisma.subject.findMany({
       where: { workspaceId },
       orderBy: { position: 'asc' },
@@ -48,12 +47,9 @@ export class SubjectsService {
   }
 
   async create(userId: string, workspaceId: string, dto: CreateSubjectDto) {
-    // TODO: Emit WebSocket event 'subject_created' to 'workspace:{workspaceId}'.
-
+    // TODO: Emit WebSocket event 'subject_created'
     await this.checkAdminRights(userId, workspaceId);
 
-    // Calculating the current total of subjects ensures the new
-    // subject receives the correct 'position' integer, placing it at the end of the list.
     const currentCount = await this.prisma.subject.count({
       where: { workspaceId },
     });
@@ -68,8 +64,6 @@ export class SubjectsService {
         },
       });
     } catch (error) {
-      // Prisma throws a P2002 error if a unique constraint is violated.
-      // The schema defines '@@unique([workspaceId, name])', preventing duplicate names.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -82,23 +76,14 @@ export class SubjectsService {
     }
   }
 
-  async update(
-    userId: string,
-    id: string,
-    updateData: Partial<CreateSubjectDto>,
-  ) {
-    // TODO: Emit WebSocket event 'subject_updated' to the respective workspace room.
-
-    // Find the subject to get its workspaceId for permission checks
+  async update(userId: string, id: string, updateData: UpdateSubjectDto) {
+    // TODO: Emit WebSocket event 'subject_updated'
     const subject = await this.prisma.subject.findUnique({ where: { id } });
     if (!subject) throw new NotFoundException('Subject not found');
 
-    // Verify if the user is an admin in that specific workspace
     await this.checkAdminRights(userId, subject.workspaceId);
 
     try {
-      // The 'update' method modifies an existing database record.
-      // Undefined fields within 'updateData' are safely ignored by Prisma.
       return await this.prisma.subject.update({
         where: { id },
         data: {
@@ -107,7 +92,6 @@ export class SubjectsService {
         },
       });
     } catch (error) {
-      // EXPLANATION: P2002 indicates the new name conflicts with an existing record.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -119,22 +103,18 @@ export class SubjectsService {
   }
 
   async remove(userId: string, id: string) {
-    // TODO: Emit WebSocket event 'subject_deleted' to the respective workspace room.
-
+    // TODO: Emit WebSocket event 'subject_deleted'
     const subject = await this.prisma.subject.findUnique({ where: { id } });
     if (!subject) throw new NotFoundException('Subject not found');
 
     await this.checkAdminRights(userId, subject.workspaceId);
 
     try {
-      // Deletes the record directly based on its unique identifier.
       await this.prisma.subject.delete({
         where: { id },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        // P2003 is triggered when a Foreign Key constraint fails.
-        // This gracefully blocks the deletion if there are any Tasks linked to this Subject.
         if (error.code === 'P2003') {
           throw new ConflictException(
             'Cannot delete this subject because there are tasks linked to it. Please reassign the tasks first.',
