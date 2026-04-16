@@ -19,35 +19,37 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
+@UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
-
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
     }
-
     return userId;
   }
 
-  // Static and Search Routes first
+  // 1. Static and Search Routes
   @Get()
-  searchUsers(@Query('search') search: string, @Query('limit') limit?: string) {
+  searchUsers(
+    @Req() req: RequestWithUser,
+    @Query('search') search: string,
+    @Query('limit') limit?: string,
+  ) {
+    this.getUserId(req);
     return this.usersService.search(search, limit ? parseInt(limit, 10) : 10);
   }
 
-  // Exact match 'me' routes
+  // 2. Exact match 'me' routes
   @Get('me')
-  @UseGuards(JwtAuthGuard)
   getMe(@Req() req: RequestWithUser) {
     return this.usersService.getMe(this.getUserId(req));
   }
 
   @Patch('me')
-  @UseGuards(JwtAuthGuard)
   updateProfile(
     @Req() req: RequestWithUser,
     @Body() updateProfileDto: UpdateProfileDto,
@@ -59,7 +61,6 @@ export class UsersController {
   }
 
   @Patch('me/preferences')
-  @UseGuards(JwtAuthGuard)
   updatePreferences(
     @Req() req: RequestWithUser,
     @Body() updatePreferencesDto: UpdatePreferencesDto,
@@ -70,21 +71,20 @@ export class UsersController {
     );
   }
 
-  // File upload routes
+  // 3. File upload routes
   @Post('avatar')
-  @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileInterceptor('file'))
   uploadAvatar(
     @Req() req: RequestWithUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    // TODO: Add strict validation for file type (JPG/PNG) and size (5MB) using a Pipe.
     return this.usersService.uploadAvatar(this.getUserId(req), file);
   }
 
   // 4. Dynamic/Parameter routes MUST be last
   @Get(':id')
-  getPublicProfile(@Param('id') id: string) {
+  getPublicProfile(@Req() req: RequestWithUser, @Param('id') id: string) {
+    this.getUserId(req);
     return this.usersService.getPublicProfile(id);
   }
 }
