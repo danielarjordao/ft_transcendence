@@ -1,33 +1,55 @@
-import { Controller, Get, Post, Patch, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Req,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { FriendsService } from './friends.service';
 import {
   CreateFriendRequestDto,
   RespondFriendRequestDto,
 } from './dto/friend-request.dto';
 
+@UseGuards(JwtAuthGuard)
 @Controller('friend-requests')
 export class FriendRequestsController {
   constructor(private readonly friendsService: FriendsService) {}
 
+  private getUserId(request: RequestWithUser): string {
+    const userId = request.user?.id;
+    if (!userId) throw new UnauthorizedException('User not authenticated');
+    return userId;
+  }
+
   @Get()
-  listRequests() {
-    // TODO: Extract actual userId from the JWT request object
-    return this.friendsService.listRequests('usr_123');
+  listRequests(@Req() req: RequestWithUser) {
+    const userId = this.getUserId(req);
+    return this.friendsService.listRequests(userId);
   }
 
   @Post()
-  // NestJS defaults to 201 Created, which matches the API Contract
-  sendRequest(@Body() dto: CreateFriendRequestDto) {
-    // TODO: Extract actual userId from the JWT request object
-    return this.friendsService.sendRequest('usr_123', dto);
+  sendRequest(
+    @Req() req: RequestWithUser,
+    @Body() dto: CreateFriendRequestDto,
+  ) {
+    const userId = this.getUserId(req);
+    return this.friendsService.sendRequest(userId, dto);
   }
 
   @Patch(':id')
   respondRequest(
+    @Req() req: RequestWithUser,
     @Param('id') id: string,
     @Body() dto: RespondFriendRequestDto,
   ) {
-    // TODO: Extract actual userId from the JWT request object
-    return this.friendsService.respondRequest('usr_123', id, dto);
+    const userId = this.getUserId(req);
+    return this.friendsService.respondRequest(userId, id, dto);
   }
 }

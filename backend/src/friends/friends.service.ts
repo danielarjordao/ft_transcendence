@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateFriendRequestDto,
   RespondFriendRequestDto,
@@ -10,109 +12,154 @@ import {
 
 @Injectable()
 export class FriendsService {
-  // Mocks moved inside the class to avoid global state leakage
-  private mockFriends = [
-    {
-      id: 'usr_456',
-      username: 'lucas_dev',
-      fullName: 'Lucas Silva',
-      avatarUrl: 'https://github.com/lucas.png',
-      status: 'online',
-    },
-  ];
+  constructor(private readonly prisma: PrismaService) {}
 
-  private mockRequests = [
-    {
-      id: 'req_1',
-      fromUserId: 'usr_789',
-      toUserId: 'usr_123',
-      status: 'pending',
-    },
-  ];
-
-  listFriends(userId: string) {
-    // TODO: Use Prisma to fetch accepted friendships where user is part of the relation.
-    // TODO: Join with the User table to return lightweight user cards.
-    // TODO: Remove this console.log and return real data from the database.
-    console.log(`Listing friends for user ${userId}`);
-    return this.mockFriends;
+  private sortIds(
+    id1: string,
+    id2: string,
+  ): { userAId: string; userBId: string } {
+    return id1 < id2
+      ? { userAId: id1, userBId: id2 }
+      : { userAId: id2, userBId: id1 };
   }
 
-  removeFriend(userId: string, friendId: string) {
-    // TODO: Use Prisma to delete the friendship relation between userId and friendId.
+  async listFriends(userId: string) {
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [{ userAId: userId }, { userBId: userId }],
+      },
+      include: {
+        userA: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true,
+            isOnline: true,
+          },
+        },
+        userB: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true,
+            isOnline: true,
+          },
+        },
+      },
+    });
+
+    return friendships.map((f) => {
+      const friend = f.userAId === userId ? f.userB : f.userA;
+      return {
+        id: friend.id,
+        username: friend.username,
+        fullName: friend.fullName,
+        avatarUrl: friend.avatarUrl,
+        status: friend.isOnline ? 'online' : 'offline',
+      };
+    });
+  }
+
+  async removeFriend(userId: string, friendId: string) {
     // TODO: Emit WebSocket event 'friend_removed' to 'user:{friendId}'.
+    const { userAId, userBId } = this.sortIds(userId, friendId);
 
-    this.mockFriends = this.mockFriends.filter(
-      (friend) => friend.id !== friendId,
-    );
+    await this.prisma.friendship.deleteMany({
+      where: { userAId, userBId },
+    });
   }
 
-  listRequests(userId: string) {
-    // TODO: Use Prisma to fetch pending friend requests where toUserId or fromUserId matches userId.
-    // TODO: Remove this console.log and return real data from the database.
-    console.log(`Listing friend requests for user ${userId}`);
-    return this.mockRequests;
+  async listRequests(userId: string) {
+    return await this.prisma.friendRequest.findMany({
+      where: {
+        OR: [{ senderId: userId }, { receiverId: userId }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  sendRequest(userId: string, dto: CreateFriendRequestDto) {
-    // TODO: Use Prisma to validate if target user exists (Throw 404 if not).
-    // TODO: Check if a friendship or pending request already exists (Throw 409 if so).
-    // TODO: Save the new friend request in the DB.
-    // TODO: Emit WebSocket event 'friend_request_received' to 'user:{dto.targetUserId}'.
-
-    const exists = this.mockRequests.find(
-      (request) =>
-        request.fromUserId === userId && request.toUserId === dto.targetUserId,
-    );
-    if (exists) {
-      throw new ConflictException('Friend request already exists');
+  async sendRequest(userId: string, dto: CreateFriendRequestDto) {
+    if (userId === dto.targetUserId) {
+      throw new ConflictException(
+        'You cannot send a friend request to yourself',
+      );
     }
 
-    const newRequest = {
-      id: `req_${Date.now()}`,
-      fromUserId: userId,
-      toUserId: dto.targetUserId,
-      status: 'pending',
-    };
-    this.mockRequests.push(newRequest);
+    const targetExists = await this.prisma.user.findUnique({
+      where: { id: dto.targetUserId },
+    });
+    if (!targetExists) throw new NotFoundException('Target user not found');
 
-    return newRequest;
+    const { userAId, userBId } = this.sortIds(userId, dto.targetUserId);
+
+    const alreadyFriends = await this.prisma.friendship.findUnique({
+      where: { userAId_userBId: { userAId, userBId } },
+    });
+    if (alreadyFriends) throw new ConflictException('You are already friends');
+
+    const existingRequest = await this.prisma.friendRequest.findFirst({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: dto.targetUserId },
+          { senderId: dto.targetUserId, receiverId: userId },
+        ],
+      },
+    });
+    if (existingRequest)
+      throw new ConflictException(
+        'A friend request already exists between you two',
+      );
+
+    // TODO: Emit WebSocket event 'friend_request_received' to 'user:{dto.targetUserId}'.
+    return await this.prisma.friendRequest.create({
+      data: {
+        senderId: userId,
+        receiverId: dto.targetUserId,
+      },
+    });
   }
 
-  respondRequest(
+  async respondRequest(
     userId: string,
     requestId: string,
     dto: RespondFriendRequestDto,
   ) {
-    // TODO: Use Prisma to find the request. Ensure toUserId matches the current userId (Security).
-    // TODO: If action is 'accept', create a friendship record in the DB and delete the request.
-    // TODO: If action is 'reject', simply delete the request.
-    // TODO: Emit WebSocket event 'friend_request_updated' to the original sender ('user:{fromUserId}').
+    const request = await this.prisma.friendRequest.findUnique({
+      where: { id: requestId },
+    });
 
-    const requestIndex = this.mockRequests.findIndex(
-      (request) => request.id === requestId,
+    if (!request) throw new NotFoundException('Friend request not found');
+
+    // Segurança Absoluta: Só quem recebe o pedido o pode aceitar ou rejeitar
+    if (request.receiverId !== userId) {
+      throw new ForbiddenException(
+        'You can only respond to requests sent to you',
+      );
+    }
+
+    if (dto.action === 'reject') {
+      await this.prisma.friendRequest.delete({ where: { id: requestId } });
+      return { status: 'rejected' };
+    }
+
+    const { userAId, userBId } = this.sortIds(
+      request.senderId,
+      request.receiverId,
     );
 
-    if (requestIndex === -1) {
-      throw new NotFoundException('Request not found');
-    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.friendRequest.delete({ where: { id: requestId } });
 
-    const request = this.mockRequests[requestIndex];
-
-    if (dto.action === 'accept') {
-      // Simulate creating a friendship relation
-      this.mockFriends.push({
-        id: request.fromUserId,
-        username: 'new_friend',
-        fullName: 'New Friend',
-        avatarUrl: '',
-        status: 'online',
+      await tx.friendship.upsert({
+        where: { userAId_userBId: { userAId, userBId } },
+        update: {},
+        create: { userAId, userBId },
       });
-    }
+    });
 
-    // Remove the friend request from the mock array after responding
-    this.mockRequests.splice(requestIndex, 1);
-
-    return { status: dto.action };
+    // TODO: Emit WebSocket event 'friend_request_updated' to the original sender.
+    return { status: 'accepted' };
   }
 }

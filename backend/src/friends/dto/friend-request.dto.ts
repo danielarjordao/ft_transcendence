@@ -2,10 +2,10 @@ import { IsString, IsEnum } from 'class-validator';
 
 export class CreateFriendRequestDto {
   @IsString()
-  targetUserId: string;
+  targetUserId!: string;
 }
 
 export class RespondFriendRequestDto {
   @IsEnum(['accept', 'reject'])
-  action: 'accept' | 'reject';
+  action!: 'accept' | 'reject';
 }

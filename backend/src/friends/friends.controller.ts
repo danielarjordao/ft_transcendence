@@ -5,23 +5,35 @@ import {
   Param,
   HttpCode,
   HttpStatus,
+  Req,
+  UseGuards,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { FriendsService } from './friends.service';
 
+@UseGuards(JwtAuthGuard)
 @Controller('friends')
 export class FriendsController {
   constructor(private readonly friendsService: FriendsService) {}
 
+  private getUserId(request: RequestWithUser): string {
+    const userId = request.user?.id;
+    if (!userId) throw new UnauthorizedException('User not authenticated');
+    return userId;
+  }
+
   @Get()
-  listFriends() {
-    // TODO: Extract actual userId from the JWT request object
-    return this.friendsService.listFriends('usr_123');
+  listFriends(@Req() req: RequestWithUser) {
+    const userId = this.getUserId(req);
+    return this.friendsService.listFriends(userId);
   }
 
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT) // Required by API Contract
-  removeFriend(@Param('id') id: string) {
-    // TODO: Extract actual userId from the JWT request object
-    this.friendsService.removeFriend('usr_123', id);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeFriend(@Req() req: RequestWithUser, @Param('id') id: string) {
+    const userId = this.getUserId(req);
+    return this.friendsService.removeFriend(userId, id);
   }
 }
