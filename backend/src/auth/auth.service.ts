@@ -36,17 +36,15 @@ export class AuthService {
       process.env.JWT_REFRESH_SECRET || 'default_refresh_secret';
 
     const [accessToken, refreshToken] = await Promise.all([
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       this.jwtService.signAsync(payload, {
         secret: accessSecret,
         expiresIn: '1h',
-      }) as Promise<string>,
+      }),
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       this.jwtService.signAsync(payload, {
         secret: refreshSecret,
         expiresIn: '7d',
-      }) as Promise<string>,
+      }),
     ]);
 
     return { accessToken, refreshToken };
