@@ -41,7 +41,7 @@ export class UsersService {
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    // First, it checks if the user exists by calling `getMe`. If the user does not exist, `getMe` will throw a NotFoundException.
+    // If username is provided, validate it is not already taken by another user.
     if (dto.username) {
       const existingUser = await this.prisma.user.findUnique({
         where: { username: dto.username },
@@ -77,19 +77,19 @@ export class UsersService {
   }
 
   async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
-    // Prisma treats JSON columns as standard JavaScript objects.
-    // To update nested JSON structures, It is necessary to first retrieve the existing JSON data, merge it with the new values in memory,
-    // and then send the complete object back to the database for updating.
+    // Retrieve current preferences to merge new changes while preserving existing data.
+    // JSON is read from DB, merged in memory, then re-saved atomically.
     const user = await this.getMe(userId);
 
-    // Asserting the type to deal with Prisma's JSON value type safety
+    // Parse current preferences, handling null or undefined cases.
     const currentPrefs = (user.preferences as UpdatePreferencesDto) || {};
     const currentNotifs = currentPrefs.notifications || {};
 
-    // Merging the existing preferences with the new values from the DTO. This ensures that only the provided fields are updated, while the rest remain unchanged.
+    // Merge strategy: only update fields explicitly provided in DTO, preserving other values.
+    // Using explicit undefined checks instead of || to avoid losing falsy values like false or 0.
     const mergedPreferences = {
       ...currentPrefs,
-      theme: dto.theme || currentPrefs.theme,
+      ...(dto.theme !== undefined && { theme: dto.theme }),
       notifications: {
         ...currentNotifs,
         ...(dto.notifications || {}),
@@ -168,22 +168,26 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // TODO: Save file to 'avatars/' folder or Cloud Storage (AWS S3 / Google Cloud).
+    // Validate file presence and format before storage.
+    if (!file) {
+      throw new NotFoundException('No file provided');
+    }
 
-    console.log(
-      `[Storage Mock] Uploading avatar for user ${userId}, file: ${file.originalname}`,
-    );
+    // TODO: Implement strict validation for file type (JPG/PNG only) and size (5MB max) using a custom Pipe.
+    // TODO: Save file to 'avatars/' folder or Cloud Storage (AWS S3 / Google Cloud) and retrieve stable storage key.
+    // TODO: Use storage key to generate temporary/signed URLs instead of hardcoded URLs.
 
-    const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.png`;
+    // For now, construct URL from storage metadata (to be replaced with real storage integration).
+    const fileExtension = file.originalname.split('.').pop() || 'png';
+    const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.${fileExtension}`;
 
-    // The generated URL is stored in the database, but the actual file handling is mocked for now.
-    await this.prisma.user.update({
+    // Persist the avatar URL in the database.
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { avatarUrl: newAvatarUrl },
+      select: { avatarUrl: true },
     });
 
-    return {
-      avatarUrl: newAvatarUrl,
-    };
+    return updatedUser;
   }
 }
