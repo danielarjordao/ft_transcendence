@@ -1095,3 +1095,5 @@ Mudancas necessarias:
 - se o time mantiver o formato simples, o DTO atual fica mais proximo do schema
 - se o time adotar o formato rico, o DTO precisara incluir `title`, `message` e possivelmente `resource`
 - normalizar o service atual, porque o mock usa `read` e `message`, enquanto o schema usa `isRead` e tambem suporta `content`
+
+
