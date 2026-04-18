@@ -1,9 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // The GlobalExceptionFilter centralizes error handling across the entire application.
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Establishing a global prefix isolates the API routes from potential static assets or frontend routes if hosted together.
   app.setGlobalPrefix('api');
