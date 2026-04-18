@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiTaskPriority, TaskSortOrder } from './task-enums.dto'; // <-- Clean API import
@@ -41,10 +42,12 @@ export class ListTasksQueryDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(['dueDate', 'title', 'priority', 'createdAt'])
   sortBy?: string;
 
   @IsEnum(TaskSortOrder)
   @IsOptional()
+  @IsIn(['asc', 'desc'])
   sortOrder?: TaskSortOrder;
 
   @IsInt()
