@@ -48,14 +48,12 @@ export class AccountService {
     });
   }
 
-  setup2fa(userId: string) {
+  setup2fa(_userId: string) {
     // TODO: [Feature - 2FA] Fetch the user record from the database.
     // TODO: [Feature - 2FA] Generate a cryptographically secure secret using the 'speakeasy' library.
     // TODO: [Feature - 2FA] Generate a base64 QR code image string using the 'qrcode' library.
     // TODO: [Feature - 2FA] Persist the generated secret temporarily in the database (e.g., in a pending status field).
 
-    // TODO: [Feature - 2FA] Remove the hardcoded mock response and return the actual generated secret and QR code data.
-    console.log(`Setting up 2FA for user ${userId}`);
     return {
       secret: 'JBSWY3DPEHPK3PXP', // Temporary mock
       otpauthUrl: `otpauth://totp/Fazelo:mock@42.fr?secret=JBSWY3DPEHPK3PXP&issuer=Fazelo`,
