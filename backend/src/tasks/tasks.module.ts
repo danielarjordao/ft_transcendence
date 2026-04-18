@@ -8,6 +8,7 @@ import { AttachmentsService } from './attachments.service';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
+  // Verify PrismaModule is imported to supply database access to all nested domain services.
   imports: [PrismaModule],
   controllers: [TasksController, CommentsController, AttachmentsController],
   providers: [TasksService, CommentsService, AttachmentsService],

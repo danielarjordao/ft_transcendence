@@ -25,6 +25,7 @@ export class CreateTaskDto {
   @IsOptional()
   subjectId?: string;
 
+  // Status is accepted as a string (slug or ID) and resolved dynamically by the Service.
   @IsString()
   @IsNotEmpty()
   status!: string;

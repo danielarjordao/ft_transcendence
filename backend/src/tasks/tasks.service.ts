@@ -18,6 +18,29 @@ import { TaskWithRelations } from './interfaces/task-relations.type';
 export class TasksService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Centralized security gatekeeper: Extracts the task and ensures the requesting user is a workspace member.
+  async findOne(userId: string, taskId: string) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        workspace: { include: { members: { where: { userId } } } },
+        field: true,
+        subject: true,
+        assignee: { include: { user: true } },
+        _count: { select: { attachments: true, comments: true } },
+      },
+    });
+
+    if (!task) throw new NotFoundException('Task not found');
+
+    if (task.workspace.members.length === 0) {
+      throw new ForbiddenException('Access denied to this workspace');
+    }
+
+    return this.formatTaskResponse(task);
+  }
+
+  // Helper method used exclusively for internal mutations (Update/Delete) to avoid double-formatting.
   private async getTaskAndCheckAccess(userId: string, taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -31,6 +54,7 @@ export class TasksService {
     return task;
   }
 
+  // Translates human-readable statuses (slugs) provided by the frontend into exact database Field UUIDs.
   private async getFieldIdByStatus(workspaceId: string, statusSlug: string) {
     const field = await this.prisma.field.findFirst({
       where: {
@@ -50,6 +74,7 @@ export class TasksService {
     return field.id;
   }
 
+  // Normalizes the complex Prisma object into the exact flat JSON contract expected by the React frontend.
   private formatTaskResponse(task: TaskWithRelations) {
     return {
       id: task.id,
@@ -85,8 +110,10 @@ export class TasksService {
     const membership = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: wsId, userId } },
     });
-    if (!membership)
+
+    if (!membership) {
       throw new ForbiddenException('You must be a member to create tasks');
+    }
 
     const fieldId = await this.getFieldIdByStatus(wsId, dto.status);
 
@@ -112,7 +139,7 @@ export class TasksService {
       },
     });
 
-    // TODO: Emitir WS event 'task_created' para 'workspace:{wsId}'
+    // TODO: [Feature - WebSockets] Emit 'task_created' event to the 'workspace:{wsId}' room to update Kanban boards in real-time.
 
     return this.formatTaskResponse(newTask);
   }
@@ -121,6 +148,7 @@ export class TasksService {
     const membership = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: wsId, userId } },
     });
+
     if (!membership) throw new ForbiddenException('Access denied');
 
     const {
@@ -133,6 +161,7 @@ export class TasksService {
       status,
     } = query;
 
+    // Dynamically construct the query filter based on provided parameters.
     const whereClause: Prisma.TaskWhereInput = {
       workspaceId: wsId,
       title: search ? { contains: search, mode: 'insensitive' } : undefined,
@@ -144,6 +173,7 @@ export class TasksService {
       fieldId: status ? await this.getFieldIdByStatus(wsId, status) : undefined,
     };
 
+    // Execute count and fetch operations atomically for accurate pagination metadata.
     const [total, items] = await this.prisma.$transaction([
       this.prisma.task.count({ where: whereClause }),
       this.prisma.task.findMany({
@@ -169,25 +199,6 @@ export class TasksService {
         hasMore: Number(offset) + Number(limit) < total,
       },
     };
-  }
-
-  async findOne(userId: string, taskId: string) {
-    const task = await this.prisma.task.findUnique({
-      where: { id: taskId },
-      include: {
-        workspace: { include: { members: { where: { userId } } } },
-        field: true,
-        subject: true,
-        assignee: { include: { user: true } },
-        _count: { select: { attachments: true, comments: true } },
-      },
-    });
-
-    if (!task) throw new NotFoundException('Task not found');
-    if (task.workspace.members.length === 0)
-      throw new ForbiddenException('Access denied');
-
-    return this.formatTaskResponse(task);
   }
 
   async update(userId: string, taskId: string, dto: UpdateTaskDto) {
@@ -222,15 +233,16 @@ export class TasksService {
       },
     });
 
-    // TODO: Emitir WS event 'task_updated' para 'workspace:{wsId}'
-    // TODO: Emitir WS event 'task_moved' se mudou de coluna
+    // TODO: [Feature - WebSockets] Emit 'task_updated' event to 'workspace:{existingTask.workspaceId}'.
+    // TODO: [Feature - WebSockets] If 'newFieldId' differs from 'existingTask.fieldId', emit a specific 'task_moved' event to trigger drag-and-drop animations on client boards.
 
     return this.formatTaskResponse(updatedTask);
   }
 
   async remove(userId: string, taskId: string) {
-    await this.getTaskAndCheckAccess(userId, taskId);
+    const _task = await this.getTaskAndCheckAccess(userId, taskId);
     await this.prisma.task.delete({ where: { id: taskId } });
-    // TODO: Emitir WS event 'task_deleted' para 'workspace:{wsId}'
+
+    // TODO: [Feature - WebSockets] Emit 'task_deleted' event to 'workspace:{task.workspaceId}'.
   }
 }

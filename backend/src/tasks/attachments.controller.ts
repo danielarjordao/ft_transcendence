@@ -34,13 +34,14 @@ export class AttachmentsController {
   listByTask(
     @Req() req: RequestWithUser,
     @Param('taskId') taskId: string,
-    @Query() _query: ListAttachmentsQueryDto,
+    @Query() _query: ListAttachmentsQueryDto, // Prefixed with _ to indicate intentional non-use for now.
   ) {
     const userId = this.getUserId(req);
     return this.attachmentsService.listByTask(userId, taskId);
   }
 
   @Post('tasks/:taskId/attachments')
+  // Intercepts multipart/form-data requests to extract multiple file uploads natively.
   @UseInterceptors(FilesInterceptor('files'))
   upload(
     @Req() req: RequestWithUser,
