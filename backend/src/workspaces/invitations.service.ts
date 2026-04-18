@@ -59,7 +59,7 @@ export class InvitationsService {
         ? WorkspaceMemberRole.ADMIN
         : WorkspaceMemberRole.MEMBER;
 
-    const invitation = await this.prisma.workspaceInvitation.create({
+    const result = await this.prisma.workspaceInvitation.create({
       data: {
         workspaceId,
         inviterId,
@@ -72,7 +72,16 @@ export class InvitationsService {
     // TODO: [Feature - Emails] Dispatch an email via Nodemailer/SendGrid to 'dto.email' containing a secure join link.
     // TODO: [Feature - WebSockets] If 'inviteeUser' exists, emit 'invitation_received' to 'user:{inviteeUser.id}'.
 
-    return invitation;
+    // Architectural Focus: Normalizing the response to match Section 3.7 of API.md
+    return {
+      id: result.id,
+      workspaceId: result.workspaceId,
+      inviterId: result.inviterId,
+      inviteeEmail: result.inviteeEmail,
+      role: result.role.toLowerCase(),
+      status: result.status.toLowerCase(),
+      createdAt: result.createdAt.toISOString(),
+    };
   }
 
   async findAll(userId: string) {
