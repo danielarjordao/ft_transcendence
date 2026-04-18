@@ -12,6 +12,7 @@ export class SendMessageDto {
 }
 
 export class ChatQueryDto {
+  // Verify that @Type is used to transform incoming HTTP query strings into numbers.
   @IsInt()
   @Min(1)
   @IsOptional()

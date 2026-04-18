@@ -7,6 +7,7 @@ export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getConversations(userId: string, limit?: number, offset?: number) {
+    // Identify all unique users the current user has interacted with.
     const partners = await this.prisma.user.findMany({
       where: {
         OR: [
@@ -25,6 +26,7 @@ export class ChatService {
       skip: offset ? Number(offset) : 0,
     });
 
+    // Concurrently fetch the latest message and unread count for each partner.
     const conversations = await Promise.all(
       partners.map(async (partner) => {
         const lastMessage = await this.prisma.message.findFirst({
@@ -46,6 +48,7 @@ export class ChatService {
           },
         });
 
+        // Translate the database boolean 'isOnline' to the string 'status' expected by the API contract.
         return {
           user: {
             ...partner,
@@ -57,6 +60,7 @@ export class ChatService {
       }),
     );
 
+    // Sort the resolved conversations dynamically so the most recent interactions appear at the top.
     return conversations.sort(
       (a, b) =>
         (b.lastMessage?.createdAt.getTime() || 0) -
@@ -70,10 +74,13 @@ export class ChatService {
     limit?: number,
     offset?: number,
   ) {
+    // Implicit side-effect: Opening a chat history automatically marks pending messages as read.
     await this.prisma.message.updateMany({
       where: { senderId: friendId, receiverId: userId, readAt: null },
       data: { readAt: new Date() },
     });
+
+    // TODO: [Feature - WebSockets] If messages were marked as read, emit a 'notification_updated' or 'read_receipt' event to the friend.
 
     const messages = await this.prisma.message.findMany({
       where: {
@@ -97,10 +104,14 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, dto: SendMessageDto) {
+    // Fail-Fast: Verify the recipient exists before attempting to create the message.
     const receiver = await this.prisma.user.findUnique({
       where: { id: dto.toUserId },
     });
-    if (!receiver) throw new NotFoundException('Destinatário não encontrado');
+
+    if (!receiver) {
+      throw new NotFoundException('Recipient not found');
+    }
 
     const newMsg = await this.prisma.message.create({
       data: {
@@ -109,6 +120,8 @@ export class ChatService {
         text: dto.text,
       },
     });
+
+    // TODO: [Feature - WebSockets] Emit 'receive_message' event to 'user:{dto.toUserId}' socket room.
 
     return {
       id: newMsg.id,

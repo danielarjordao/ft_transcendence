@@ -14,11 +14,13 @@ import { ChatService } from './chat.service';
 import { SendMessageDto, ChatQueryDto } from './dto/chat.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
+// Verify that the entire controller is protected by the JWT guard to prevent unauthorized access to private messages.
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
+  // Check that authentication extraction is centralized to enforce Fail-Fast validation.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
 
