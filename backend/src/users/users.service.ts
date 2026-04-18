@@ -9,13 +9,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Prisma } from '../generated/prisma/client';
+import { createPaginatedResponse } from '../common/utils/pagination.util';
 
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getMe(userId: string) {
-    // Explicit selection ensures no sensitive authentication data is exposed to the client.
+    // Explicit selection ensures no sensitive authentication data is exposed to the client,
+    // strictly adhering to the API.md contract for GET /api/users/me.
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -27,8 +29,6 @@ export class UsersService {
         avatarUrl: true,
         accountType: true,
         preferences: true,
-        isOnline: true,
-        twoFactorEnabled: true,
         createdAt: true,
       },
     });
@@ -125,33 +125,40 @@ export class UsersService {
     };
   }
 
-  async search(query: string, limit: number) {
-    if (!query) return [];
+  async search(query: string, limit: number, offset: number) {
+    if (!query) return createPaginatedResponse([], 0, limit, offset);
 
-    const users = await this.prisma.user.findMany({
-      where: {
-        OR: [
-          { username: { contains: query, mode: 'insensitive' } },
-          { fullName: { contains: query, mode: 'insensitive' } },
-        ],
-      },
-      take: limit,
-      select: {
-        id: true,
-        fullName: true,
-        username: true,
-        avatarUrl: true,
-        isOnline: true,
-      },
-    });
+    const whereClause: Prisma.UserWhereInput = {
+      OR: [
+        { username: { contains: query, mode: 'insensitive' } },
+        { fullName: { contains: query, mode: 'insensitive' } },
+      ],
+    };
 
-    return users.map((user) => {
+    // Optimization: Use a single transaction to fetch both total count and paginated results, ensuring data consistency and reducing latency.
+    const [total, users] = await this.prisma.$transaction([
+      this.prisma.user.count({ where: whereClause }),
+      this.prisma.user.findMany({
+        where: whereClause,
+        take: limit,
+        skip: offset,
+        select: {
+          id: true,
+          fullName: true,
+          username: true,
+          avatarUrl: true,
+          isOnline: true,
+        },
+      }),
+    ]);
+
+    const formattedUsers = users.map((user) => {
       const { isOnline, ...rest } = user;
-      return {
-        ...rest,
-        status: isOnline ? 'online' : 'offline',
-      };
+      return { ...rest, status: isOnline ? 'online' : 'offline' };
     });
+
+    // Use the utility function to create a consistent paginated response structure.
+    return createPaginatedResponse(formattedUsers, total, limit, offset);
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {

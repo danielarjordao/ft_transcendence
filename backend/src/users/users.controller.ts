@@ -40,9 +40,14 @@ export class UsersController {
     @Req() req: RequestWithUser,
     @Query('search') search: string,
     @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
   ) {
     this.getUserId(req);
-    return this.usersService.search(search, limit ? parseInt(limit, 10) : 10);
+    return this.usersService.search(
+      search,
+      limit ? parseInt(limit, 10) : 20,
+      offset ? parseInt(offset, 10) : 0,
+    );
   }
 
   // 2. Exact match 'me' routes
