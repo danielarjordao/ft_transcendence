@@ -26,7 +26,9 @@ export class InvitationsService {
     });
 
     if (!inviterMember || inviterMember.role === 'MEMBER') {
-      throw new ForbiddenException('Only Admins or Owners can invite members.');
+      throw new ForbiddenException(
+        `DEBUG INFO -> Member: ${JSON.stringify(inviterMember)} | wsId: ${workspaceId} | userId: ${inviterId}`,
+      );
     }
 
     // Fail-Fast: Prevent inviting users who are already in the workspace.
