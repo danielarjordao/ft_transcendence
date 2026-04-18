@@ -15,18 +15,13 @@ import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
 export class WorkspacesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Helper method to check if the user has admin rights in the workspace
   private async checkAdminRights(userId: string, workspaceId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
-      where: {
-        workspaceId_userId: { workspaceId, userId },
-      },
+      where: { workspaceId_userId: { workspaceId, userId } },
     });
 
     if (!membership) {
-      throw new NotFoundException(
-        'Workspace not found or you are not a member',
-      );
+      throw new NotFoundException('Workspace not found or access denied');
     }
 
     if (membership.role === WorkspaceMemberRole.MEMBER) {
@@ -37,7 +32,7 @@ export class WorkspacesService {
   }
 
   async create(userId: string, dto: CreateWorkspaceDto) {
-    // Create workspace and add creator as owner in a single transaction.
+    // Highly efficient nested write: provisions the workspace, the owner, initial subjects, and fields atomically.
     const newWorkspace = await this.prisma.workspace.create({
       data: {
         name: dto.name,
@@ -74,21 +69,16 @@ export class WorkspacesService {
   }
 
   async findAll(userId: string, query: ListWorkspacesQueryDto) {
-    // Fetch workspaces where user is a member, with pagination and optional search.
     const { limit = 20, offset = 0, search } = query;
 
-    // Constructing the where clause to filter workspaces by membership and optional search term
     const whereClause: Prisma.WorkspaceWhereInput = {
-      members: {
-        some: { userId: userId },
-      },
+      members: { some: { userId: userId } },
     };
 
     if (search) {
       whereClause.name = { contains: search, mode: 'insensitive' };
     }
 
-    // Using a transaction to get total count and paginated results in one go
     const [total, workspaces] = await this.prisma.$transaction([
       this.prisma.workspace.count({ where: whereClause }),
       this.prisma.workspace.findMany({
@@ -111,13 +101,10 @@ export class WorkspacesService {
   }
 
   async findOne(userId: string, wsId: string) {
-    // Fetch workspace by ID, ensuring the user is a member, and include related data.
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: wsId },
       include: {
-        members: {
-          where: { userId: userId },
-        },
+        members: { where: { userId: userId } },
         subjects: true,
         fields: true,
         _count: { select: { members: true } },
@@ -128,7 +115,6 @@ export class WorkspacesService {
       throw new NotFoundException('Workspace not found or access denied');
     }
 
-    // Restructure the response to include member count and exclude the members array.
     const { members: _members, _count, ...rest } = workspace;
     return {
       ...rest,
@@ -137,36 +123,33 @@ export class WorkspacesService {
   }
 
   async update(userId: string, wsId: string, dto: UpdateWorkspaceDto) {
-    // Check admin rights and update workspace details.
     await this.checkAdminRights(userId, wsId);
 
-    // Only update fields that are provided in the DTO
-    return await this.prisma.workspace.update({
+    const updatedWorkspace = await this.prisma.workspace.update({
       where: { id: wsId },
       data: {
         name: dto.name,
         description: dto.description,
       },
     });
+
+    // TODO: [Feature - WebSockets] Emit 'workspace_updated' to 'workspace:{wsId}'.
+    return updatedWorkspace;
   }
 
   async remove(userId: string, wsId: string) {
-    // Check admin rights and delete workspace.
     const membership = await this.checkAdminRights(userId, wsId);
 
-    // Only the owner can delete the workspace
     if (membership.role !== WorkspaceMemberRole.OWNER) {
       throw new ForbiddenException('Only the workspace owner can delete it');
     }
 
-    // Deleting the workspace will cascade and remove all related data due to Prisma's referential actions
-    await this.prisma.workspace.delete({
-      where: { id: wsId },
-    });
+    await this.prisma.workspace.delete({ where: { id: wsId } });
+
+    // TODO: [Feature - WebSockets] Emit 'workspace_deleted' to forcefully close the workspace UI for all active members.
   }
 
   async listMembers(userId: string, wsId: string) {
-    // Fetch WorkspaceMember and join with User.
     const isMember = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: wsId, userId: userId } },
     });
@@ -175,7 +158,6 @@ export class WorkspacesService {
       throw new NotFoundException('Workspace not found or access denied');
     }
 
-    // Fetch members with user details, ordered by join date.
     const members = await this.prisma.workspaceMember.findMany({
       where: { workspaceId: wsId },
       include: {
@@ -207,13 +189,10 @@ export class WorkspacesService {
     memberId: string,
     dto: UpdateMemberRoleDto,
   ) {
-    // Verify admin rights and update member role, ensuring users cannot demote themselves.
     await this.checkAdminRights(userId, wsId);
 
-    // Validate the target role and ensure it's a valid enum value
     const targetRole = dto.role.toUpperCase() as WorkspaceMemberRole;
 
-    // Using strictly the Prisma enum type, matching the API contract
     if (userId === memberId && targetRole === WorkspaceMemberRole.MEMBER) {
       throw new UnprocessableEntityException('Cannot demote yourself');
     }
@@ -223,6 +202,7 @@ export class WorkspacesService {
       data: { role: targetRole },
     });
 
+    // TODO: [Feature - WebSockets] Emit 'member_role_updated' to 'workspace:{wsId}'.
     return {
       userId: updatedMember.userId,
       role: updatedMember.role,
@@ -230,12 +210,11 @@ export class WorkspacesService {
   }
 
   async removeMember(userId: string, wsId: string, memberId: string) {
-    // Allow self-removal; otherwise require admin/owner privileges.
+    // Validates if the user is leaving voluntarily or if an admin is removing them.
     if (userId !== memberId) {
       await this.checkAdminRights(userId, wsId);
     }
 
-    // Ensure the target user is actually a member of this workspace.
     const targetMembership = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
     });
@@ -244,7 +223,6 @@ export class WorkspacesService {
       throw new NotFoundException('Member not found in this workspace');
     }
 
-    // Protect workspace ownership: only the owner can remove themselves.
     if (
       targetMembership.role === WorkspaceMemberRole.OWNER &&
       userId !== memberId
@@ -252,24 +230,21 @@ export class WorkspacesService {
       throw new ForbiddenException('Owner cannot be removed from workspace');
     }
 
-    // Keep data consistent in one atomic operation:
-    // Unassign tasks that currently point to this member.
-    // Remove the workspace membership record.
-    // If any step fails, Prisma rolls back the whole transaction.
+    // Atomic boundary: Ensures tasks are unassigned strictly before the member is purged.
     await this.prisma.$transaction(async (tx) => {
       await tx.task.updateMany({
         where: {
           workspaceId: wsId,
           assigneeId: memberId,
         },
-        data: {
-          assigneeId: null,
-        },
+        data: { assigneeId: null },
       });
 
       await tx.workspaceMember.delete({
         where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
       });
     });
+
+    // TODO: [Feature - WebSockets] Emit 'member_removed' to 'workspace:{wsId}'.
   }
 }

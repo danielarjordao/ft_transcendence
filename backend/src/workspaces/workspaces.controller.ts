@@ -19,7 +19,7 @@ import { InvitationsService } from './invitations.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
-import { InviteMemberDto } from './interfaces/workspace-invitation.interfaces';
+import { InviteMemberDto } from './dto/invite-member.dto';
 import { UpdateMemberRoleDto } from './dto/workspace-member.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 

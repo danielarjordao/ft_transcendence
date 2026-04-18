@@ -10,13 +10,3 @@ export class InviteMemberDto {
   @IsIn(['admin', 'member'])
   role!: string;
 }
-
-export interface WorkspaceInvitation {
-  id: string;
-  workspaceId: string;
-  inviterId: string;
-  inviteeEmail: string;
-  role: string;
-  status: string;
-  createdAt: Date;
-}
