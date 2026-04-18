@@ -4,21 +4,20 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { Prisma, TaskPriority } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
-import {
-  Prisma,
-  TaskPriority as PrismaTaskPriority,
-} from '../generated/prisma/client';
 import { TaskWithRelations } from './interfaces/task-relations.type';
+import { createPaginatedResponse } from '../common/utils/pagination.util';
 
 @Injectable()
 export class TasksService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Centralized security gatekeeper: Extracts the task and ensures the requesting user is a workspace member.
+  // Architectural Focus: Centralized security gatekeeper.
+  // Extracts the task and ensures the requesting user is a workspace member in a single query.
   async findOne(userId: string, taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -31,7 +30,9 @@ export class TasksService {
       },
     });
 
-    if (!task) throw new NotFoundException('Task not found');
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
 
     if (task.workspace.members.length === 0) {
       throw new ForbiddenException('Access denied to this workspace');
@@ -40,7 +41,7 @@ export class TasksService {
     return this.formatTaskResponse(task);
   }
 
-  // Helper method used exclusively for internal mutations (Update/Delete) to avoid double-formatting.
+  // Architectural Focus: Internal helper for mutations (Update/Delete) to avoid double-formatting.
   private async getTaskAndCheckAccess(userId: string, taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
@@ -54,27 +55,26 @@ export class TasksService {
     return task;
   }
 
-  // Translates human-readable statuses (slugs) provided by the frontend into exact database Field UUIDs.
+  // Architectural Focus: Safe translation of Frontend Slugs to Database UUIDs.
   private async getFieldIdByStatus(workspaceId: string, statusSlug: string) {
-    const field = await this.prisma.field.findFirst({
-      where: {
-        workspaceId,
-        OR: [
-          { name: { equals: statusSlug, mode: 'insensitive' } },
-          { id: statusSlug },
-        ],
-      },
+    const fields = await this.prisma.field.findMany({
+      where: { workspaceId },
+      select: { id: true, name: true },
     });
 
-    if (!field) {
+    const matchedField = fields.find(
+      (f) => f.name.toLowerCase().replace(/\s+/g, '_') === statusSlug,
+    );
+
+    if (!matchedField) {
       throw new BadRequestException(
         `Status (Field) '${statusSlug}' not found in this workspace`,
       );
     }
-    return field.id;
+    return matchedField.id;
   }
 
-  // Normalizes the complex Prisma object into the exact flat JSON contract expected by the React frontend.
+  // Architectural Focus: Normalizes the complex Prisma object into the exact flat JSON contract.
   private formatTaskResponse(task: TaskWithRelations) {
     return {
       id: task.id,
@@ -127,7 +127,7 @@ export class TasksService {
         subjectId: dto.subjectId,
         assigneeId: dto.assigneeId,
         priority: dto.priority
-          ? (dto.priority.toUpperCase() as PrismaTaskPriority)
+          ? (dto.priority.toUpperCase() as TaskPriority)
           : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
       },
@@ -139,7 +139,7 @@ export class TasksService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'task_created' event to the 'workspace:{wsId}' room to update Kanban boards in real-time.
+    // TODO: [Feature - WebSockets] Emit 'task_created' event to the 'workspace:{wsId}' room.
 
     return this.formatTaskResponse(newTask);
   }
@@ -151,36 +151,69 @@ export class TasksService {
 
     if (!membership) throw new ForbiddenException('Access denied');
 
-    const {
-      limit = 20,
-      offset = 0,
-      search,
-      priority,
-      subject,
-      assignee,
-      status,
-    } = query;
+    const limit = query.limit ? Number(query.limit) : 20;
+    const offset = query.offset ? Number(query.offset) : 0;
 
-    // Dynamically construct the query filter based on provided parameters.
+    // Architectural Focus: Safe dynamic initialization of the whereClause to prevent ESLint errors.
     const whereClause: Prisma.TaskWhereInput = {
       workspaceId: wsId,
-      title: search ? { contains: search, mode: 'insensitive' } : undefined,
-      priority: priority
-        ? (priority.toUpperCase() as PrismaTaskPriority)
-        : undefined,
-      subjectId: subject,
-      assigneeId: assignee,
-      fieldId: status ? await this.getFieldIdByStatus(wsId, status) : undefined,
     };
 
-    // Execute count and fetch operations atomically for accurate pagination metadata.
+    if (query.search) {
+      whereClause.title = { contains: query.search, mode: 'insensitive' };
+    }
+    if (query.priority) {
+      whereClause.priority = query.priority.toUpperCase() as TaskPriority;
+    }
+    if (query.subject) {
+      whereClause.subjectId = query.subject;
+    }
+    if (query.assignee) {
+      whereClause.assigneeId = query.assignee;
+    }
+    if (query.status) {
+      whereClause.fieldId = await this.getFieldIdByStatus(wsId, query.status);
+    }
+    if (query.dueFrom || query.dueTo) {
+      whereClause.dueDate = {};
+      if (query.dueFrom) {
+        whereClause.dueDate.gte = new Date(query.dueFrom);
+      }
+      if (query.dueTo) {
+        whereClause.dueDate.lte = new Date(query.dueTo);
+      }
+    }
+
+    // Dynamic Sorting Logic
+    let orderByClause: Prisma.TaskOrderByWithRelationInput = {
+      createdAt: 'desc',
+    };
+    if (query.sortBy) {
+      const direction = String(query.sortOrder).toLowerCase() === 'desc' ? 'desc' : 'asc';
+      switch (query.sortBy) {
+        case 'dueDate':
+          orderByClause = { dueDate: direction };
+          break;
+        case 'title':
+          orderByClause = { title: direction };
+          break;
+        case 'priority':
+          orderByClause = { priority: direction };
+          break;
+        case 'createdAt':
+          orderByClause = { createdAt: direction };
+          break;
+      }
+    }
+
+    // Atomic Fetch & Count
     const [total, items] = await this.prisma.$transaction([
       this.prisma.task.count({ where: whereClause }),
       this.prisma.task.findMany({
         where: whereClause,
-        take: Number(limit),
-        skip: Number(offset),
-        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+        orderBy: orderByClause,
         include: {
           field: true,
           subject: true,
@@ -190,15 +223,9 @@ export class TasksService {
       }),
     ]);
 
-    return {
-      items: items.map((task) => this.formatTaskResponse(task)),
-      pageInfo: {
-        limit: Number(limit),
-        offset: Number(offset),
-        total,
-        hasMore: Number(offset) + Number(limit) < total,
-      },
-    };
+    const formattedItems = items.map((task) => this.formatTaskResponse(task));
+
+    return createPaginatedResponse(formattedItems, total, limit, offset);
   }
 
   async update(userId: string, taskId: string, dto: UpdateTaskDto) {
@@ -221,7 +248,7 @@ export class TasksService {
         subjectId: dto.subjectId,
         assigneeId: dto.assigneeId,
         priority: dto.priority
-          ? (dto.priority.toUpperCase() as PrismaTaskPriority)
+          ? (dto.priority.toUpperCase() as TaskPriority)
           : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       },
@@ -234,7 +261,7 @@ export class TasksService {
     });
 
     // TODO: [Feature - WebSockets] Emit 'task_updated' event to 'workspace:{existingTask.workspaceId}'.
-    // TODO: [Feature - WebSockets] If 'newFieldId' differs from 'existingTask.fieldId', emit a specific 'task_moved' event to trigger drag-and-drop animations on client boards.
+    // TODO: [Feature - WebSockets] If 'newFieldId' differs from 'existingTask.fieldId', emit 'task_moved'.
 
     return this.formatTaskResponse(updatedTask);
   }
