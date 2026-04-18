@@ -32,7 +32,6 @@ export class WorkspacesService {
   }
 
   async create(userId: string, dto: CreateWorkspaceDto) {
-    // Highly efficient nested write: provisions the workspace, the owner, initial subjects, and fields atomically.
     const newWorkspace = await this.prisma.workspace.create({
       data: {
         name: dto.name,
@@ -65,7 +64,9 @@ export class WorkspacesService {
       },
     });
 
-    return newWorkspace;
+    // Architectural Focus: Reuse findOne to guarantee the returned "workspace details object"
+    // exactly matches the contract, avoiding payload inconsistencies.
+    return this.findOne(userId, newWorkspace.id);
   }
 
   async findAll(userId: string, query: ListWorkspacesQueryDto) {
@@ -101,24 +102,44 @@ export class WorkspacesService {
   }
 
   async findOne(userId: string, wsId: string) {
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: wsId },
+    // Architectural Focus (Security): Use findFirst to enforce that the requesting
+    // user MUST be a member of this workspace at the root query level.
+    const workspace = await this.prisma.workspace.findFirst({
+      where: {
+        id: wsId,
+        members: { some: { userId: userId } }, // <-- SECURITY GATEKEEPER RESTORED
+      },
       include: {
-        members: { where: { userId: userId } },
+        members: {
+          take: 5, // Member summary for the frontend
+          include: {
+            user: { select: { id: true, avatarUrl: true, username: true } },
+          },
+          orderBy: { joinedAt: 'asc' },
+        },
         subjects: true,
         fields: true,
         _count: { select: { members: true } },
       },
     });
 
-    if (!workspace || workspace.members.length === 0) {
+    if (!workspace) {
       throw new NotFoundException('Workspace not found or access denied');
     }
 
-    const { members: _members, _count, ...rest } = workspace;
     return {
-      ...rest,
-      memberCount: _count.members,
+      id: workspace.id,
+      name: workspace.name,
+      description: workspace.description,
+      subjects: workspace.subjects,
+      fields: workspace.fields,
+      memberCount: workspace._count.members,
+      memberSummary: workspace.members.map((m) => ({
+        id: m.userId,
+        username: m.user.username,
+        avatarUrl: m.user.avatarUrl,
+      })),
+      createdAt: workspace.createdAt.toISOString(),
     };
   }
 
