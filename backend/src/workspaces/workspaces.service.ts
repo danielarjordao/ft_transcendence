@@ -173,12 +173,13 @@ export class WorkspacesService {
       orderBy: { joinedAt: 'asc' },
     });
 
+    // Architectural Focus: Map database structures to the exact API contract (Section 3.6).
+    // We explicitly lowercase the 'role' enum to match the frontend expectations.
     return members.map((m) => ({
       userId: m.userId,
-      role: m.role,
-      joinedAt: m.joinedAt,
       username: m.user.username,
       fullName: m.user.fullName,
+      role: m.role.toLowerCase(),
       status: m.user.isOnline ? 'online' : 'offline',
     }));
   }
@@ -197,15 +198,31 @@ export class WorkspacesService {
       throw new UnprocessableEntityException('Cannot demote yourself');
     }
 
+    // Architectural Focus: Use 'include' to fetch the related User data atomically during the update,
+    // fulfilling the API.md requirement to return the fully populated member object.
     const updatedMember = await this.prisma.workspaceMember.update({
       where: { workspaceId_userId: { workspaceId: wsId, userId: memberId } },
       data: { role: targetRole },
+      include: {
+        user: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            isOnline: true,
+          },
+        },
+      },
     });
 
     // TODO: [Feature - WebSockets] Emit 'member_role_updated' to 'workspace:{wsId}'.
+
     return {
       userId: updatedMember.userId,
-      role: updatedMember.role,
+      username: updatedMember.user.username,
+      fullName: updatedMember.user.fullName,
+      role: updatedMember.role.toLowerCase(),
+      status: updatedMember.user.isOnline ? 'online' : 'offline',
     };
   }
 
