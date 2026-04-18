@@ -7,21 +7,17 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { TaskPriority } from '../../generated/prisma/client'; // <-- IMPORT CORRIGIDO
-
-export enum TaskSortOrder {
-  ASC = 'asc',
-  DESC = 'desc',
-}
+import { ApiTaskPriority, TaskSortOrder } from './task-enums.dto'; // <-- Clean API import
 
 export class ListTasksQueryDto {
   @IsString()
   @IsOptional()
   search?: string;
 
-  @IsEnum(TaskPriority)
+  // Use the API boundary enum, preventing Prisma leakage.
+  @IsEnum(ApiTaskPriority)
   @IsOptional()
-  priority?: TaskPriority;
+  priority?: ApiTaskPriority;
 
   @IsString()
   @IsOptional()

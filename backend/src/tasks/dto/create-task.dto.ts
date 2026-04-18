@@ -5,12 +5,7 @@ import {
   IsEnum,
   IsDateString,
 } from 'class-validator';
-
-export enum ApiTaskPriority {
-  LOW = 'low',
-  MEDIUM = 'medium',
-  HIGH = 'high',
-}
+import { ApiTaskPriority } from './task-enums.dto'; // <-- Import the shared enum
 
 export class CreateTaskDto {
   @IsString()

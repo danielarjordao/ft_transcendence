@@ -1,5 +1,5 @@
 import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
-import { TaskPriority } from '../../generated/prisma/client'; // <-- IMPORT CORRIGIDO
+import { ApiTaskPriority } from './task-enums.dto'; // <-- Clean API import
 
 export class UpdateTaskDto {
   @IsString()
@@ -10,9 +10,10 @@ export class UpdateTaskDto {
   @IsOptional()
   description?: string;
 
-  @IsEnum(TaskPriority)
+  // Use the API boundary enum, preventing Prisma leakage.
+  @IsEnum(ApiTaskPriority)
   @IsOptional()
-  priority?: TaskPriority;
+  priority?: ApiTaskPriority;
 
   @IsString()
   @IsOptional()
