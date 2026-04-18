@@ -15,6 +15,8 @@ import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
+    // TODO: [Feature - DevOps] Import and configure '@nestjs/config' (ConfigModule.forRoot) to centralize and validate environment variables (.env).
+    // TODO: [Feature - WebSockets] Add RealtimeModule (or EventsModule) here once the Socket.io gateway is implemented.
     PrismaModule,
     SubjectsModule,
     FieldsModule,

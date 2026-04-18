@@ -3,13 +3,15 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  // Create the NestJS application using the root module (AppModule)
   const app = await NestFactory.create(AppModule);
 
-  // Set a global prefix for all routes (e.g., /api/workspaces instead of just /workspaces)
+  // Establishing a global prefix isolates the API routes from potential static assets or frontend routes if hosted together.
   app.setGlobalPrefix('api');
 
-  // Use a global validation pipe to automatically validate incoming requests based on our DTOs
+  // The Global Validation Pipe enforces our DTO contracts at the network edge.
+  // - whitelist: Strips out any properties not explicitly defined in the DTO.
+  // - forbidNonWhitelisted: Throws an error if the payload contains unknown properties (prevents prototype pollution/injection).
+  // - transform: Automatically casts payloads into their corresponding DTO class instances.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -18,14 +20,14 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS to allow requests from the frontend (running on a different port)
+  // TODO: [Feature - Security] Lock down CORS for production.
+  // Replace the default open CORS policy with an explicit array of allowed frontend origins (e.g., origin: ['https://fazelo.com']).
   app.enableCors();
 
-  // Start the server on the specified port (default to 3000 if not set in environment variables)
+  // Binds the server to all network interfaces ('0.0.0.0') to ensure compatibility with Docker and Cloud environments.
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 
-// Call the bootstrap function to start the server, and catch any errors that occur during startup
 bootstrap().catch((err) => {
   console.error('Error starting server:', err);
 });
