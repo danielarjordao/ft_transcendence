@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import 'multer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,13 +12,10 @@ import { Prisma } from '../generated/prisma/client';
 
 @Injectable()
 export class UsersService {
-  // Injecting PrismaService to interact with the database
   constructor(private readonly prisma: PrismaService) {}
 
   async getMe(userId: string) {
-    // `findUnique` translates to a SQL query that looks for a single record based on unique criteria.
-    // The `select` object specifies which fields to retrieve from the database.
-    // This is crucial for security, as it prevents sensitive information (like password hashes) from being accidentally exposed.
+    // Explicit selection ensures no sensitive authentication data is exposed to the client.
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -35,27 +33,25 @@ export class UsersService {
       },
     });
 
-    // If no user is found with the given ID, a NotFoundException is thrown, which results in a 404 HTTP response.
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     return user;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
-    // If username is provided, validate it is not already taken by another user.
+    // Fail-Fast: Enforce username uniqueness before attempting the database update.
     if (dto.username) {
       const existingUser = await this.prisma.user.findUnique({
         where: { username: dto.username },
       });
 
-      // If a user exists with this username, and their ID is different from the current user:
       if (existingUser && existingUser.id !== userId) {
         throw new ConflictException('Username is already taken');
       }
     }
 
-    // `update` modifies an existing record.
-    // if a field in `data` is undefined, Prisma simply
-    // ignores it and doesn't update that specific column in the database.
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -63,7 +59,6 @@ export class UsersService {
         fullName: dto.fullName,
         bio: dto.bio,
       },
-      // 'select' is used here to specify which fields to return after the update operation.
       select: {
         id: true,
         username: true,
@@ -73,20 +68,18 @@ export class UsersService {
       },
     });
 
+    // TODO: [Feature - WebSockets] Emit 'profile_updated' event to all connected clients to synchronize UI elements instantly.
+
     return updatedUser;
   }
 
   async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
-    // Retrieve current preferences to merge new changes while preserving existing data.
-    // JSON is read from DB, merged in memory, then re-saved atomically.
+    // Strategy: Perform an in-memory deep merge to prevent overwriting existing JSON preference fields.
     const user = await this.getMe(userId);
 
-    // Parse current preferences, handling null or undefined cases.
     const currentPrefs = (user.preferences as UpdatePreferencesDto) || {};
     const currentNotifs = currentPrefs.notifications || {};
 
-    // Merge strategy: only update fields explicitly provided in DTO, preserving other values.
-    // Using explicit undefined checks instead of || to avoid losing falsy values like false or 0.
     const mergedPreferences = {
       ...currentPrefs,
       ...(dto.theme !== undefined && { theme: dto.theme }),
@@ -99,7 +92,6 @@ export class UsersService {
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: {
-        // Ensuring the object is properly serialized for Prisma
         preferences: mergedPreferences as unknown as Prisma.InputJsonValue,
       },
     });
@@ -108,9 +100,7 @@ export class UsersService {
   }
 
   async getPublicProfile(userId: string) {
-    // The `select` object acts like a SQL projection.
-    // Instead of fetching all columns (including sensitive ones like passwordHash),
-    // it only fetches the exact columns defined as `true`. This saves RAM and bandwidth.
+    // Public projection: Strictly limit exposed fields for non-authenticated profile viewing.
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -123,9 +113,11 @@ export class UsersService {
       },
     });
 
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
 
-    // Restructuring the response to convert `isOnline` boolean into a more frontend-friendly `status` string.
+    // Bridge the gap between the database boolean and the frontend string contract.
     const { isOnline, ...rest } = user;
     return {
       ...rest,
@@ -136,11 +128,6 @@ export class UsersService {
   async search(query: string, limit: number) {
     if (!query) return [];
 
-    // `findMany` retrieves an array of records.
-    // The `OR` operator checks multiple conditions.
-    // `contains` acts like a SQL `LIKE '%query%'`.
-    // `mode: 'insensitive'` ensures 'Ana' matches 'ana' (acts like `ILIKE` in PostgreSQL).
-    // `take` is the equivalent of SQL `LIMIT`.
     const users = await this.prisma.user.findMany({
       where: {
         OR: [
@@ -168,25 +155,25 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // Validate file presence and format before storage.
+    // Fail-Fast: Verify the file actually exists in the payload.
     if (!file) {
-      throw new NotFoundException('No file provided');
+      throw new BadRequestException('No file provided');
     }
 
-    // TODO: Implement strict validation for file type (JPG/PNG only) and size (5MB max) using a custom Pipe.
-    // TODO: Save file to 'avatars/' folder or Cloud Storage (AWS S3 / Google Cloud) and retrieve stable storage key.
-    // TODO: Use storage key to generate temporary/signed URLs instead of hardcoded URLs.
+    // TODO: [Feature - Security] Implement strict validation for file type (MIME check) and size constraints using a custom Pipe.
+    // TODO: [Feature - S3 Storage] Upload the physical file to AWS S3 and retrieve the real storage key.
+    // TODO: [Feature - S3 Storage] Construct the newAvatarUrl using the stable S3 URL or a signed endpoint.
 
-    // For now, construct URL from storage metadata (to be replaced with real storage integration).
     const fileExtension = file.originalname.split('.').pop() || 'png';
     const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.${fileExtension}`;
 
-    // Persist the avatar URL in the database.
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { avatarUrl: newAvatarUrl },
       select: { avatarUrl: true },
     });
+
+    // TODO: [Feature - WebSockets] Emit 'avatar_updated' event so connected friends see the visual change immediately.
 
     return updatedUser;
   }

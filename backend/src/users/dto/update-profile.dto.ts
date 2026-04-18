@@ -9,6 +9,7 @@ export class UpdateProfileDto {
   @IsOptional()
   username?: string;
 
+  // Boundary constraints protect the database from excessively large payloads.
   @IsString()
   @IsOptional()
   @MaxLength(160)

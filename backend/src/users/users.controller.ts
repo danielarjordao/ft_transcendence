@@ -19,11 +19,13 @@ import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
+// Securing the entire controller prevents unauthorized access to user data.
 @UseGuards(JwtAuthGuard)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
+  // Explicit helper method ensures traceability of user identity extraction.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
     if (!userId) {
