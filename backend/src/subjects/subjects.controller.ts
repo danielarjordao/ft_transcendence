@@ -18,11 +18,13 @@ import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 
+// Securing the entire controller prevents unauthorized data manipulation.
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class SubjectsController {
   constructor(private readonly subjectsService: SubjectsService) {}
 
+  // Explicit helper method ensures traceability of the user identity extraction.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
     if (!userId) {
