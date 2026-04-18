@@ -189,7 +189,8 @@ export class TasksService {
       createdAt: 'desc',
     };
     if (query.sortBy) {
-      const direction = String(query.sortOrder).toLowerCase() === 'desc' ? 'desc' : 'asc';
+      const direction =
+        String(query.sortOrder).toLowerCase() === 'desc' ? 'desc' : 'asc';
       switch (query.sortBy) {
         case 'dueDate':
           orderByClause = { dueDate: direction };
