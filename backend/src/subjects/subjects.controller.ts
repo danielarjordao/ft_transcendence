@@ -12,7 +12,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';

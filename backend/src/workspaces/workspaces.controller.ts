@@ -13,7 +13,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { WorkspacesService } from './workspaces.service';
 import { InvitationsService } from './invitations.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';

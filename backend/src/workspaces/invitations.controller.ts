@@ -11,7 +11,7 @@ import {
 import { InvitationsService } from './invitations.service';
 import { UpdateWorkspaceInvitationDto } from './dto/update-invitation.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 
 @UseGuards(JwtAuthGuard)
 @Controller('workspace-invitations')

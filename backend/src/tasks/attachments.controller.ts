@@ -14,7 +14,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { AttachmentsService } from './attachments.service';
 import { ListAttachmentsQueryDto } from './dto/list-attachments-query.dto';

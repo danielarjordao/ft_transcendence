@@ -9,7 +9,7 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { RequestWithUser } from 'src/common/decorators/interfaces/active-user.interface';
+import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { ChatService } from './chat.service';
 import { SendMessageDto, ChatQueryDto } from './dto/chat.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
