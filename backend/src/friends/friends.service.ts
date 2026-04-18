@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -83,7 +84,7 @@ export class FriendsService {
 
   async sendRequest(userId: string, dto: CreateFriendRequestDto) {
     if (userId === dto.targetUserId) {
-      throw new ConflictException(
+      throw new UnprocessableEntityException(
         'You cannot send a friend request to yourself',
       );
     }
@@ -161,29 +162,22 @@ export class FriendsService {
       });
     });
 
-    // Architectural Focus: Fetching and returning the new friend's profile data
-    // to comply with the API.md contract (Section 2.6).
-    const friend = await this.prisma.user.findUnique({
-      where: { id: request.senderId },
-      select: {
-        id: true,
-        username: true,
-        fullName: true,
-        avatarUrl: true,
-        isOnline: true,
-      },
+    const friendship = await this.prisma.friendship.findUnique({
+      where: { userAId_userBId: { userAId, userBId } },
     });
 
-    if (!friend) throw new NotFoundException('Friend profile no longer exists');
+    if (!friendship) {
+      throw new NotFoundException('Friendship could not be established');
+    }
 
     // TODO: [Feature - WebSockets] Emit 'friend_request_updated' to the original sender.
 
+    // Contract Alignment: Return the strict Friendship object representation,
+    // avoiding undocumented custom shapes.
     return {
-      id: friend.id,
-      username: friend.username,
-      fullName: friend.fullName,
-      avatarUrl: friend.avatarUrl,
-      status: friend.isOnline ? 'online' : 'offline',
+      userAId: friendship.userAId,
+      userBId: friendship.userBId,
+      createdAt: friendship.createdAt.toISOString(),
     };
   }
 }
