@@ -18,11 +18,13 @@ import { FieldsService } from './fields.service';
 import { CreateFieldDto } from './dto/create-field.dto';
 import { UpdateFieldDto } from './dto/update-field.dto';
 
+// Verify that the entire Controller is protected, preventing unauthorized data manipulation.
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class FieldsController {
   constructor(private readonly fieldsService: FieldsService) {}
 
+  // Explicit helper method ensures traceability of the user identity extraction.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
     if (!userId) {

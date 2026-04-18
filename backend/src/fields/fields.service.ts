@@ -7,12 +7,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFieldDto } from './dto/create-field.dto';
 import { UpdateFieldDto } from './dto/update-field.dto';
-import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client'; // <-- Usando Enum
+import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
 
 @Injectable()
 export class FieldsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Centralized authorization guard to verify workspace access.
   private async checkMembership(userId: string, workspaceId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
@@ -26,6 +27,7 @@ export class FieldsService {
     return membership;
   }
 
+  // Centralized authorization guard to enforce Role-Based Access Control (RBAC).
   private async checkAdminRights(userId: string, workspaceId: string) {
     const membership = await this.checkMembership(userId, workspaceId);
 
@@ -45,7 +47,6 @@ export class FieldsService {
   }
 
   async create(userId: string, workspaceId: string, dto: CreateFieldDto) {
-    // TODO: Emit WebSocket event 'field_created' to 'workspace:{workspaceId}'.
     await this.checkAdminRights(userId, workspaceId);
 
     const currentCount = await this.prisma.field.count({
@@ -53,7 +54,7 @@ export class FieldsService {
     });
 
     try {
-      return await this.prisma.field.create({
+      const newField = await this.prisma.field.create({
         data: {
           workspaceId,
           name: dto.name,
@@ -61,7 +62,12 @@ export class FieldsService {
           position: currentCount,
         },
       });
+
+      // TODO: [Feature - WebSockets] Emit 'field_created' event to the 'workspace:{workspaceId}' room.
+
+      return newField;
     } catch (error) {
+      // Catch unique constraint violations (e.g., duplicate field names in the same workspace).
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -75,20 +81,23 @@ export class FieldsService {
   }
 
   async update(userId: string, id: string, updateData: UpdateFieldDto) {
-    // TODO: Emit WebSocket event 'field_updated' to the respective workspace room.
     const field = await this.prisma.field.findUnique({ where: { id } });
     if (!field) throw new NotFoundException('Field not found');
 
     await this.checkAdminRights(userId, field.workspaceId);
 
     try {
-      return await this.prisma.field.update({
+      const updatedField = await this.prisma.field.update({
         where: { id },
         data: {
           name: updateData.name,
           color: updateData.color,
         },
       });
+
+      // TODO: [Feature - WebSockets] Emit 'field_updated' event to the 'workspace:{field.workspaceId}' room.
+
+      return updatedField;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -101,7 +110,6 @@ export class FieldsService {
   }
 
   async remove(userId: string, id: string) {
-    // TODO: Emit WebSocket event 'field_deleted' to the respective workspace room.
     const field = await this.prisma.field.findUnique({ where: { id } });
     if (!field) throw new NotFoundException('Field not found');
 
@@ -111,9 +119,12 @@ export class FieldsService {
       await this.prisma.field.delete({
         where: { id },
       });
+
+      // TODO: [Feature - WebSockets] Emit 'field_deleted' event to the 'workspace:{field.workspaceId}' room.
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        // P2003 = Foreign Key Constraint Falhou
+        // P2003 corresponds to a Foreign Key Constraint Failure.
+        // This ensures fields containing active tasks cannot be deleted, maintaining data integrity.
         if (error.code === 'P2003') {
           throw new ConflictException(
             'Cannot delete this field because there are tasks linked to it. Please reassign the tasks first.',
