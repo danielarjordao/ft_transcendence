@@ -15,11 +15,15 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { AccountService } from './account.service';
 import { ChangePasswordDto, Verify2FaDto } from './dto/account-security.dto';
 
+// Verify that authentication guards are applied at the class level
+// to prevent accidental exposure of future endpoints.
 @UseGuards(JwtAuthGuard)
 @Controller('account')
 export class AccountController {
   constructor(private readonly accountService: AccountService) {}
 
+  // Check that ID extraction is centralized in a private helper
+  // to enforce Fail-Fast patterns and avoid repetitive null-checking.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
     if (!userId) {

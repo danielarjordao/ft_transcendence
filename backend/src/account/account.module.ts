@@ -4,6 +4,7 @@ import { AccountController } from './account.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
+  // Verify that PrismaModule is imported to provide the database connection singleton.
   imports: [PrismaModule],
   controllers: [AccountController],
   providers: [AccountService],
