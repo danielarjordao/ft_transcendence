@@ -21,6 +21,7 @@ import { UpdateNotificationDto } from './dto/notification.dto';
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  // Explicit extraction of the authenticated user to maintain traceability.
   private getUserId(request: RequestWithUser): string {
     const userId = request.user?.id;
     if (!userId) throw new UnauthorizedException('User not authenticated');
@@ -39,6 +40,7 @@ export class NotificationsController {
     return this.notificationsService.getUnreadCount(userId);
   }
 
+  // Ensure this static route is placed before the @Patch(':id') route.
   @Patch('read-all')
   markAllAsRead(@Req() req: RequestWithUser) {
     const userId = this.getUserId(req);
