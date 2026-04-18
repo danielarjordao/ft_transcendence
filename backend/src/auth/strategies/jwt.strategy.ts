@@ -7,8 +7,8 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
-    // Set up the JWT strategy with options to extract the token from the Authorization header,
-    // validate its signature and expiration, and specify the secret key for verification.
+    // Verify that the strategy is configured to extract the token from the Authorization header,
+    // and that it strictly checks expiration dates using the environment secret.
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -16,8 +16,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
   }
 
-  // The validate method is called after the token is successfully verified.
-  //  It extracts the user ID from the token payload and returns it as an ActiveUserDto.
+  // Check that the validate method acts as a Fail-Fast guard.
+  // If the payload lacks a valid ID, it immediately rejects the request.
   validate(payload: JwtPayload): ActiveUserDto {
     const id = payload.sub || payload.id;
 
@@ -25,7 +25,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Invalid token payload');
     }
 
-    // The returned object will be attached to the request as "request.user" and can be accessed in controllers using the @ActiveUser() decorator.
+    // This returned object binds to the Request object (req.user),
+    // making it accessible via decorators in the Controllers.
     return { id };
   }
 }

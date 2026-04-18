@@ -7,6 +7,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
+  // Verify that necessary external providers (Database, Passport, JWT) are imported.
+  // The JwtModule handles token signing, while PassportModule integrates the extraction strategy.
   imports: [PrismaModule, PassportModule, JwtModule.register({})],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
