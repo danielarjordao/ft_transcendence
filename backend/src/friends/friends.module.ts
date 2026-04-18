@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule],
+  // Registering both controllers ensures they share the same singleton instance of FriendsService.
   controllers: [FriendsController, FriendRequestsController],
   providers: [FriendsService],
 })

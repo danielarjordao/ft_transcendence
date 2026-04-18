@@ -6,6 +6,7 @@ export class CreateFriendRequestDto {
 }
 
 export class RespondFriendRequestDto {
+  // Enforcing strict enumeration prevents invalid state mutations at the boundary layer.
   @IsEnum(['accept', 'reject'])
   action!: 'accept' | 'reject';
 }

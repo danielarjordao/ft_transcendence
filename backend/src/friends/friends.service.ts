@@ -14,6 +14,8 @@ import {
 export class FriendsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // Lexicographical sorting ensures the composite key (userAId_userBId) is always generated consistently,
+  // preventing duplicate entries representing the same relationship in the database.
   private sortIds(
     id1: string,
     id2: string,
@@ -50,6 +52,7 @@ export class FriendsService {
       },
     });
 
+    // Map the relationships to extract the profile of the counterparty, ignoring the requesting user.
     return friendships.map((f) => {
       const friend = f.userAId === userId ? f.userB : f.userA;
       return {
@@ -63,7 +66,7 @@ export class FriendsService {
   }
 
   async removeFriend(userId: string, friendId: string) {
-    // TODO: Emit WebSocket event 'friend_removed' to 'user:{friendId}'.
+    // TODO: [Feature - WebSockets] Emit 'friend_removed' event to 'user:{friendId}' room to update their UI in real-time.
     const { userAId, userBId } = this.sortIds(userId, friendId);
 
     await this.prisma.friendship.deleteMany({
@@ -81,6 +84,7 @@ export class FriendsService {
   }
 
   async sendRequest(userId: string, dto: CreateFriendRequestDto) {
+    // Fail-Fast: Prevent users from sending requests to themselves.
     if (userId === dto.targetUserId) {
       throw new ConflictException(
         'You cannot send a friend request to yourself',
@@ -90,15 +94,23 @@ export class FriendsService {
     const targetExists = await this.prisma.user.findUnique({
       where: { id: dto.targetUserId },
     });
-    if (!targetExists) throw new NotFoundException('Target user not found');
+
+    if (!targetExists) {
+      throw new NotFoundException('Target user not found');
+    }
 
     const { userAId, userBId } = this.sortIds(userId, dto.targetUserId);
 
+    // Fail-Fast: Prevent requests if the relationship already exists.
     const alreadyFriends = await this.prisma.friendship.findUnique({
       where: { userAId_userBId: { userAId, userBId } },
     });
-    if (alreadyFriends) throw new ConflictException('You are already friends');
 
+    if (alreadyFriends) {
+      throw new ConflictException('You are already friends');
+    }
+
+    // Fail-Fast: Prevent spamming by checking for pending requests in either direction.
     const existingRequest = await this.prisma.friendRequest.findFirst({
       where: {
         OR: [
@@ -107,12 +119,14 @@ export class FriendsService {
         ],
       },
     });
-    if (existingRequest)
+
+    if (existingRequest) {
       throw new ConflictException(
         'A friend request already exists between you two',
       );
+    }
 
-    // TODO: Emit WebSocket event 'friend_request_received' to 'user:{dto.targetUserId}'.
+    // TODO: [Feature - WebSockets] Emit 'friend_request_received' event to 'user:{dto.targetUserId}'.
     return await this.prisma.friendRequest.create({
       data: {
         senderId: userId,
@@ -130,9 +144,11 @@ export class FriendsService {
       where: { id: requestId },
     });
 
-    if (!request) throw new NotFoundException('Friend request not found');
+    if (!request) {
+      throw new NotFoundException('Friend request not found');
+    }
 
-    // Segurança Absoluta: Só quem recebe o pedido o pode aceitar ou rejeitar
+    // Absolute Security: Ensure only the designated recipient can authorize or deny the request.
     if (request.receiverId !== userId) {
       throw new ForbiddenException(
         'You can only respond to requests sent to you',
@@ -149,6 +165,7 @@ export class FriendsService {
       request.receiverId,
     );
 
+    // Atomic Transaction: Guarantee that the request is destroyed only if the friendship is successfully created.
     await this.prisma.$transaction(async (tx) => {
       await tx.friendRequest.delete({ where: { id: requestId } });
 
@@ -159,7 +176,7 @@ export class FriendsService {
       });
     });
 
-    // TODO: Emit WebSocket event 'friend_request_updated' to the original sender.
+    // TODO: [Feature - WebSockets] Emit 'friend_request_updated' event to the original sender to notify acceptance.
     return { status: 'accepted' };
   }
 }

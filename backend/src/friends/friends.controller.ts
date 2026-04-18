@@ -31,6 +31,7 @@ export class FriendsController {
   }
 
   @Delete(':id')
+  // Using 204 No Content guarantees a standard REST response for successful deletions.
   @HttpCode(HttpStatus.NO_CONTENT)
   removeFriend(@Req() req: RequestWithUser, @Param('id') id: string) {
     const userId = this.getUserId(req);
