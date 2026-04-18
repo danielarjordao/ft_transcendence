@@ -25,28 +25,22 @@ export class ChatService {
       ],
     };
 
-    // Atomic Transaction: Execute count and fetch operations concurrently to ensure
-    // pagination metadata perfectly matches the data slice.
-    const [total, partners] = await this.prisma.$transaction([
-      this.prisma.user.count({ where: whereClause }),
-      this.prisma.user.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          username: true,
-          fullName: true,
-          avatarUrl: true,
-          isOnline: true,
-        },
-        take: limit,
-        skip: offset,
-      }),
-    ]);
+    // Data Aggregation: First fetch the total count for pagination metadata.
+    const allPartners = await this.prisma.user.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        avatarUrl: true,
+        isOnline: true,
+      },
+    });
 
     // Data Aggregation: Map through active partners to construct the Conversation Preview Object
     // exactly as demanded by the API.md contract.
     const conversations = await Promise.all(
-      partners.map(async (partner) => {
+      allPartners.map(async (partner) => {
         const lastMessage = await this.prisma.message.findFirst({
           where: {
             OR: [
@@ -57,21 +51,15 @@ export class ChatService {
           orderBy: { createdAt: 'desc' },
           select: { id: true, text: true, createdAt: true },
         });
-
         // Calculate unread badge count for this specific conversation.
         const unreadCount = await this.prisma.message.count({
-          where: {
-            senderId: partner.id,
-            receiverId: userId,
-            readAt: null,
-          },
+          where: { senderId: partner.id, receiverId: userId, readAt: null },
         });
 
+        const { isOnline, ...cleanPartner } = partner;
+
         return {
-          user: {
-            ...partner,
-            status: partner.isOnline ? 'online' : 'offline',
-          },
+          user: { ...cleanPartner, status: isOnline ? 'online' : 'offline' },
           lastMessage,
           unreadCount,
         };
@@ -85,7 +73,14 @@ export class ChatService {
         (a.lastMessage?.createdAt.getTime() || 0),
     );
 
-    return createPaginatedResponse(sortedConversations, total, limit, offset);
+    const paginatedSlice = sortedConversations.slice(offset, offset + limit);
+
+    return createPaginatedResponse(
+      paginatedSlice,
+      sortedConversations.length,
+      limit,
+      offset,
+    );
   }
 
   async getMessages(
@@ -94,47 +89,37 @@ export class ChatService {
     limitInput?: number,
     offsetInput?: number,
   ) {
+    // Contract Alignment: Respect pagination query params, defaulting if absent.
     const limit = limitInput ? Number(limitInput) : 50;
     const offset = offsetInput ? Number(offsetInput) : 0;
 
-    // Side-Effect: Opening a conversation inherently means the user has read pending messages.
-    // We update this atomically before fetching to ensure the returned payload reflects the 'read' state.
     await this.prisma.message.updateMany({
       where: { senderId: friendId, receiverId: userId, readAt: null },
       data: { readAt: new Date() },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'notification_updated' or 'read_receipt' to 'user:{friendId}' to clear their unread badges.
+    // TODO: [Feature - WebSockets] Emit 'notification_updated' or 'read_receipt' to 'user:{friendId}'.
 
-    const whereClause: Prisma.MessageWhereInput = {
-      OR: [
-        { senderId: userId, receiverId: friendId },
-        { senderId: friendId, receiverId: userId },
-      ],
-    };
+    // Fetch as a raw array to match API.md (Section 6.2) while respecting limit/offset.
+    const messages = await this.prisma.message.findMany({
+      where: {
+        OR: [
+          { senderId: userId, receiverId: friendId },
+          { senderId: friendId, receiverId: userId },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset,
+    });
 
-    const [total, messages] = await this.prisma.$transaction([
-      this.prisma.message.count({ where: whereClause }),
-      this.prisma.message.findMany({
-        where: whereClause,
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-        skip: offset,
-      }),
-    ]);
-
-    // Format projection to match the API.md contract strictly.
-    const formattedMessages = messages.map(
-      ({ id, senderId, text, createdAt, readAt }) => ({
-        id,
-        senderId,
-        text,
-        createdAt,
-        readAt,
-      }),
-    );
-
-    return createPaginatedResponse(formattedMessages, total, limit, offset);
+    return messages.map((m) => ({
+      id: m.id,
+      senderId: m.senderId,
+      text: m.text,
+      createdAt: m.createdAt.toISOString(),
+      readAt: m.readAt ? m.readAt.toISOString() : null,
+    }));
   }
 
   async sendMessage(userId: string, dto: SendMessageDto) {
