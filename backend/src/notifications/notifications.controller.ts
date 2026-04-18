@@ -8,6 +8,7 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  Query,
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -15,6 +16,7 @@ import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.i
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
 import { UpdateNotificationDto } from './dto/notification.dto';
+import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('notifications')
@@ -29,9 +31,12 @@ export class NotificationsController {
   }
 
   @Get()
-  findAll(@Req() req: RequestWithUser) {
+  findAll(
+    @Req() req: RequestWithUser,
+    @Query() query: ListNotificationsQueryDto,
+  ) {
     const userId = this.getUserId(req);
-    return this.notificationsService.findAll(userId);
+    return this.notificationsService.findAll(userId, query);
   }
 
   @Get('unread-count')

@@ -3,7 +3,10 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma, NotificationType } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { createPaginatedResponse } from '../common/utils/pagination.util';
+import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 
 @Injectable()
 export class NotificationsService {
@@ -12,14 +15,34 @@ export class NotificationsService {
   // Note: Creation of notifications is not handled here. Architecturally, notifications
   // should be generated as side-effects by other modules (e.g., TasksService, FriendsService).
 
-  async findAll(userId: string) {
-    const notifications = await this.prisma.notification.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(userId: string, query: ListNotificationsQueryDto) {
+    const limit = query.limit || 20;
+    const offset = query.offset || 0;
 
-    // Map database structures to the exact contract expected by the frontend UI.
-    return notifications.map((n) => ({
+    // Safe dynamic query construction based on API contract filters
+    const whereClause: Prisma.NotificationWhereInput = {
+      userId,
+    };
+
+    if (query.type) {
+      whereClause.type = query.type.toUpperCase() as NotificationType;
+    }
+
+    if (query.read !== undefined) {
+      whereClause.isRead = query.read === 'true';
+    }
+
+    const [total, notifications] = await this.prisma.$transaction([
+      this.prisma.notification.count({ where: whereClause }),
+      this.prisma.notification.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+    ]);
+
+    const formattedNotifications = notifications.map((n) => ({
       id: n.id,
       type: n.type.toLowerCase(),
       title: n.title,
@@ -28,6 +51,13 @@ export class NotificationsService {
       resource: n.resource,
       createdAt: n.createdAt,
     }));
+
+    return createPaginatedResponse(
+      formattedNotifications,
+      total,
+      limit,
+      offset,
+    );
   }
 
   async getUnreadCount(userId: string) {
