@@ -5,9 +5,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: transcendence_user
-      POSTGRES_PASSWORD: transcendence_password
-      POSTGRES_DB: transcendence_db
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
@@ -22,7 +22,32 @@ services:
       - ./backend:/app
       - /app/node_modules
     environment:
-      DATABASE_URL: "postgresql://transcendence_user:transcendence_password@db:5432/transcendence_db?schema=public"
+      DATABASE_URL: "${DATABASE_URL}"
+      PORT: "${PORT}"
+      NODE_ENV: "${NODE_ENV}"
+      FRONTEND_URL: "${FRONTEND_URL}"
+      API_URL: "${API_URL}"
+      JWT_ACCESS_SECRET: "${JWT_ACCESS_SECRET}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET}"
+      JWT_ACCESS_EXPIRES_IN: "${JWT_ACCESS_EXPIRES_IN}"
+      JWT_REFRESH_EXPIRES_IN: "${JWT_REFRESH_EXPIRES_IN}"
+      JWT_2FA_SECRET: "${JWT_2FA_SECRET}"
+      JWT_2FA_EXPIRES_IN: "${JWT_2FA_EXPIRES_IN}"
+      AUTH_TOKEN_PEPPER: "${AUTH_TOKEN_PEPPER}"
+      AUTH_ENCRYPTION_KEY: "${AUTH_ENCRYPTION_KEY}"
+      PASSWORD_RESET_EXPIRES_MINUTES: "${PASSWORD_RESET_EXPIRES_MINUTES}"
+      PASSWORD_RESET_FRONTEND_URL: "${PASSWORD_RESET_FRONTEND_URL}"
+      FORTY_TWO_CLIENT_ID: "${FORTY_TWO_CLIENT_ID}"
+      FORTY_TWO_CLIENT_SECRET: "${FORTY_TWO_CLIENT_SECRET}"
+      FORTY_TWO_CALLBACK_URL: "${FORTY_TWO_CALLBACK_URL}"
+      SMTP_HOST: "${SMTP_HOST}"
+      SMTP_PORT: "${SMTP_PORT}"
+      SMTP_USER: "${SMTP_USER}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD}"
+      SMTP_FROM: "${SMTP_FROM}"
+      HTTPS_ENABLED: "${HTTPS_ENABLED}"
+      HTTPS_KEY_PATH: "${HTTPS_KEY_PATH}"
+      HTTPS_CERT_PATH: "${HTTPS_CERT_PATH}"
     depends_on:
       - db
 
@@ -36,7 +61,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_URL: "http://localhost:3000"
+      VITE_API_URL: "${VITE_API_URL}"
     depends_on:
       - backend
 
