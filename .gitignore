@@ -11,5 +11,6 @@ dist/
 .devcontainer/
 docker-compose-explicacao.md
 package-lock-explicacao.md
+autenticacao.md
 
 node_modules/
