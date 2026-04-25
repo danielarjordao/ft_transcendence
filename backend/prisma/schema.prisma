@@ -63,6 +63,7 @@ model User {
   passwordChangedAt            DateTime?
   lastLoginAt                  DateTime?
   twoFactorEnabled             Boolean               @default(false)
+  twoFactorPendingSecretEnc    String?
   twoFactorSecretEnc           String?
   twoFactorConfirmedAt         DateTime?
   createdAt                    DateTime              @default(now())
