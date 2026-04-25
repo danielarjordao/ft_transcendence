@@ -148,4 +148,29 @@ export class ChatService {
       readAt: newMsg.readAt,
     };
   }
+
+  // New method to mark messages as read, which can be called from the controller or gateway when appropriate.
+  async markMessagesAsRead(userId: string, fromUserId: string) {
+    // Update all messages from 'fromUserId' to 'userId' that are currently unread, setting their readAt timestamp.
+    const result = await this.prisma.message.updateMany({
+      where: {
+        senderId: fromUserId,
+        receiverId: userId,
+        readAt: null,
+      },
+      data: {
+        readAt: new Date(),
+      },
+    });
+
+    // If no messages were updated, we can return null or an appropriate response
+    // to indicate that there were no unread messages to mark as read.
+    if (result.count === 0) {
+      return null;
+    }
+
+    // Return the timestamp of when the messages were marked as read,
+    // which can be used for client-side updates.
+    return new Date();
+  }
 }

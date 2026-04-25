@@ -146,4 +146,44 @@ export class ChatGateway
       client.emit('error', { message: 'Could not send message' });
     }
   }
+
+  // New WebSocket handler to mark messages as read, which can be triggered by the client when they view a conversation.
+  @SubscribeMessage('mark_messages_read')
+  async handleMarkAsRead(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { fromUserId: string },
+  ) {
+    // Ensure the reader is authenticated and has a valid user ID before proceeding.
+    const readerId = client.data?.user?.id;
+    if (!readerId) return;
+
+    try {
+      // Mark messages as read in the database and get the timestamp of when they were marked as read.
+      const readDate = await this.chatService.markMessagesAsRead(
+        readerId,
+        payload.fromUserId,
+      );
+
+      // Only emit the "messages_read" event if there were messages that were actually marked as read,
+      // to avoid unnecessary client updates.
+      if (readDate) {
+        const senderRoom = `user:${payload.fromUserId}`;
+
+        // Emit an event to the sender's room to notify them that their messages have been read,
+        //  including the reader's ID and the timestamp for accurate client-side updates.
+        this.server.to(senderRoom).emit('messages_read', {
+          byUserId: readerId,
+          readAt: readDate,
+        });
+
+        this.logger.log(
+          `Messages from ${payload.fromUserId} read by ${readerId}`,
+        );
+      }
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to mark messages as read: ${errorMessage}`);
+    }
+  }
 }
