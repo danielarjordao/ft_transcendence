@@ -98,8 +98,6 @@ export class ChatService {
       data: { readAt: new Date() },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'notification_updated' or 'read_receipt' to 'user:{friendId}'.
-
     // Fetch as a raw array to match API.md (Section 6.2) while respecting limit/offset.
     const messages = await this.prisma.message.findMany({
       where: {
