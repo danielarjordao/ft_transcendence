@@ -1,4 +1,4 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
+import { Logger, UnauthorizedException, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   OnGatewayConnection,
@@ -12,10 +12,18 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Update to specific frontend domain in production
+    // Safely parse FRONTEND_URL to avoid empty string origins
+    origin: process.env.FRONTEND_URL
+      ? process.env.FRONTEND_URL.split(',')
+          .map((url) => url.trim())
+          .filter(Boolean)
+      : ['http://localhost:5173'],
+    credentials: true,
   },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+{
   @WebSocketServer()
   server!: Server;
 
@@ -23,51 +31,62 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(private readonly jwtService: JwtService) {}
 
-  // Handle incoming socket connection and enforce JWT authentication.
+  /**
+   * Fail-Fast: Ensure critical environment variables are present on startup.
+   */
+  onModuleInit() {
+    if (!process.env.JWT_ACCESS_SECRET) {
+      // Throwing an error allows NestJS to perform a graceful shutdown
+      throw new Error(
+        'CRITICAL: JWT_ACCESS_SECRET is not defined in environment variables!',
+      );
+    }
+  }
+
   async handleConnection(client: AuthenticatedSocket) {
-    // <-- 1. Volta a colocar o async aqui
     try {
-      const token = client.handshake.query.token as string;
+      const token = client.handshake.auth?.token as string;
 
       if (!token) {
-        throw new UnauthorizedException('Missing authentication token');
+        throw new UnauthorizedException(
+          'Missing authentication token in handshake auth',
+        );
       }
 
-      // TODO: Remove the hardcoded secret when AuthModule becomes the single source of truth
+      // Strict JWT validation without fallback secrets
       const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: process.env.JWT_ACCESS_SECRET || 'default_dev_secret',
+        secret: process.env.JWT_ACCESS_SECRET,
+        algorithms: ['HS256'],
+        issuer: process.env.JWT_ISSUER,
+        audience: process.env.JWT_AUDIENCE,
       });
 
       const userId = payload.sub || payload.id;
-
       if (!userId) {
-        throw new UnauthorizedException('Invalid token payload');
+        throw new UnauthorizedException('Invalid token claims');
       }
 
       client.data.user = { id: userId };
-      const userRoom = `user:${userId}`;
-
-      await client.join(userRoom); // <-- 2. Adiciona o AWAIT aqui!
+      await client.join(`user:${userId}`);
 
       this.logger.log(`Client connected: ${client.id} | User: ${userId}`);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Unknown authentication error';
+        error instanceof Error ? error.message : 'Auth failed';
 
       this.logger.error(
         `Connection rejected: ${client.id} | Reason: ${errorMessage}`,
       );
 
-      // O emit não devolve Promise, por isso não precisa de await
-      client.emit('error', {
+      client.emit('auth_error', {
         type: 'unauthorized',
-        message: 'Invalid or missing token',
+        message: 'Security validation failed',
       });
+
       client.disconnect();
     }
   }
 
-  // Handle socket disconnection.
   handleDisconnect(client: AuthenticatedSocket) {
     const userId = client.data?.user?.id;
     this.logger.log(
