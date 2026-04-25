@@ -52,6 +52,9 @@ export class ChatGateway
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
+      // Support multiple token locations for flexibility in client implementations
+      const queryToken = client.handshake.query?.token as string;
+
       // Extract token from handshake authentication data
       const authPayloadToken = client.handshake.auth?.token as string;
 
@@ -61,7 +64,7 @@ export class ChatGateway
         ? authHeader.split(' ')[1]
         : authHeader;
 
-      const token = authPayloadToken || headerToken;
+      const token = queryToken || authPayloadToken || headerToken;
 
       if (!token) {
         throw new UnauthorizedException(
