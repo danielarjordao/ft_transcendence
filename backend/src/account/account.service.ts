@@ -52,7 +52,8 @@ export class AccountService {
     // TODO: [Feature - 2FA] Fetch the user record from the database.
     // TODO: [Feature - 2FA] Generate a cryptographically secure secret using the 'speakeasy' library.
     // TODO: [Feature - 2FA] Generate a base64 QR code image string using the 'qrcode' library.
-    // TODO: [Feature - 2FA] Persist the generated secret temporarily in the database (e.g., in a pending status field).
+    // TODO: [Feature - 2FA] Persist the generated secret temporarily in `twoFactorPendingSecretEnc`.
+    // TODO: [Feature - 2FA] Do not overwrite `twoFactorSecretEnc` here; it should only be filled after successful verification.
 
     return {
       secret: 'JBSWY3DPEHPK3PXP', // Temporary mock
@@ -67,9 +68,10 @@ export class AccountService {
       throw new BadRequestException('Invalid 2FA code');
     }
 
-    // TODO: [Feature - 2FA] Fetch the pending 2FA secret for the user from the database.
-    // TODO: [Feature - 2FA] Validate the provided DTO code against the secret using the 'speakeasy' library.
-    // TODO: [Feature - 2FA] Upon successful validation, update the user record to mark 2FA as fully active and clear the pending secret.
+    // TODO: [Feature - 2FA] Fetch `twoFactorPendingSecretEnc` for the user from the database.
+    // TODO: [Feature - 2FA] Validate the provided DTO code against the pending secret using the 'speakeasy' library.
+    // TODO: [Feature - 2FA] Upon successful validation, move the pending secret into `twoFactorSecretEnc`.
+    // TODO: [Feature - 2FA] Clear `twoFactorPendingSecretEnc`, mark `twoFactorEnabled` as true, and set `twoFactorConfirmedAt`.
   }
 
   async disable2fa(userId: string, dto: Verify2FaDto) {
@@ -79,12 +81,15 @@ export class AccountService {
 
     // TODO: [Feature - 2FA] Fetch the currently active 2FA secret from the user record.
     // TODO: [Feature - 2FA] Validate the provided code using 'speakeasy' to authorize the teardown.
+    // TODO: [Feature - 2FA] If there is a stale pending setup, clear `twoFactorPendingSecretEnc` as part of the disable flow.
 
     await this.prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorEnabled: false,
-        // TODO: [Feature - 2FA] Nullify the actual secret field in the database during this update.
+        twoFactorPendingSecretEnc: null,
+        twoFactorSecretEnc: null,
+        twoFactorConfirmedAt: null,
       },
     });
   }
