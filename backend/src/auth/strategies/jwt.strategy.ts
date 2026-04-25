@@ -5,6 +5,12 @@ import { ActiveUserDto } from '../../common/guards/interfaces/active-user.interf
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
+// Behind the scenes flow (Instantiation vs Execution):
+// - Instantiation: This class is created as a Singleton exactly once when the NestJS server starts. 
+//   Its constructor runs and registers this strategy inside the Passport library under the name 'jwt'.
+// - Execution: Its validation logic (extracting the token, verifying the signature, and calling validate()) 
+//   is ONLY triggered when a Guard's canActivate() method explicitly asks Passport to run the 'jwt' strategy.
+//   Ex: @UseGuards(JwtAuthGuard)
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
     // Verify that the strategy is configured to extract the token from the Authorization header,
