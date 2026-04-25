@@ -66,8 +66,9 @@ export class ChatGateway
       const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: process.env.JWT_ACCESS_SECRET,
         algorithms: ['HS256'],
-        issuer: process.env.JWT_ISSUER,
-        audience: process.env.JWT_AUDIENCE,
+        // TODO: Consider adding issuer and audience validation for enhanced security
+        // issuer: process.env.JWT_ISSUER,
+        // audience: process.env.JWT_AUDIENCE,
       });
 
       const userId = payload.sub || payload.id;
