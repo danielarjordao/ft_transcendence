@@ -140,8 +140,6 @@ export class ChatService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'receive_message' event to the 'user:{dto.toUserId}' room.
-
     return {
       id: newMsg.id,
       senderId: newMsg.senderId,
