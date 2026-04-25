@@ -45,7 +45,16 @@ export class ChatGateway
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
-      const token = client.handshake.auth?.token as string;
+      // Extract token from handshake authentication data
+      const authPayloadToken = client.handshake.auth?.token as string;
+
+      // Fallback to Authorization header if token is not in handshake auth
+      const authHeader = client.handshake.headers.authorization;
+      const headerToken = authHeader?.startsWith('Bearer ')
+        ? authHeader.split(' ')[1]
+        : authHeader;
+
+      const token = authPayloadToken || headerToken;
 
       if (!token) {
         throw new UnauthorizedException(
