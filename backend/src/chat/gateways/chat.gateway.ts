@@ -7,8 +7,14 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server } from 'socket.io';
-import { AuthenticatedSocket } from '../interfaces/authenticated-socket.interface';
-import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import type { AuthenticatedSocket } from '../interfaces/authenticated-socket.interface';
+import type { JwtPayload } from '../interfaces/jwt-payload.interface';
+import {
+  SubscribeMessage,
+  MessageBody,
+  ConnectedSocket,
+} from '@nestjs/websockets';
+import { ChatService } from '../chat.service';
 
 @WebSocketGateway({
   cors: {
@@ -29,11 +35,12 @@ export class ChatGateway
 
   private readonly logger = new Logger(ChatGateway.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly chatService: ChatService,
+  ) {}
 
-  /**
-   * Fail-Fast: Ensure critical environment variables are present on startup.
-   */
+  // Fail-Fast: Ensure critical environment variables are present on startup.
   onModuleInit() {
     if (!process.env.JWT_ACCESS_SECRET) {
       // Throwing an error allows NestJS to perform a graceful shutdown
@@ -102,5 +109,38 @@ export class ChatGateway
     this.logger.log(
       `Client disconnected: ${client.id} | User: ${userId || 'Unknown'}`,
     );
+  }
+
+  @SubscribeMessage('send_message')
+  async handleSendMessage(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { toUserId: string; text: string },
+  ) {
+    const fromUserId = client.data?.user?.id;
+    if (!fromUserId) return;
+
+    try {
+      // Save the message using the ChatService, which also handles validation and error cases
+      const savedMessage = await this.chatService.sendMessage(
+        fromUserId,
+        payload,
+      );
+
+      // Emit a message to the receiver's room
+      const receiverRoom = `user:${payload.toUserId}`;
+      this.server.to(receiverRoom).emit('receive_message', savedMessage);
+
+      // Emit a confirmation back to the sender (optional, but good for UX)
+      client.emit('message_sent', savedMessage);
+
+      this.logger.log(`Message sent from ${fromUserId} to ${payload.toUserId}`);
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send message: ${errorMessage}`);
+
+      // Notify the sender about the failure without exposing sensitive details
+      client.emit('error', { message: 'Could not send message' });
+    }
   }
 }
