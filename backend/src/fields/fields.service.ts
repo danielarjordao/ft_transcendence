@@ -8,10 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateFieldDto } from './dto/create-field.dto';
 import { UpdateFieldDto } from './dto/update-field.dto';
 import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class FieldsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   // Centralized authorization guard to verify workspace access.
   private async checkMembership(userId: string, workspaceId: string) {
@@ -63,7 +67,10 @@ export class FieldsService {
         },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'field_created' event to the 'workspace:{workspaceId}' room.
+      // Emit 'field_created' event to the 'workspace:{workspaceId}' room, allowing real-time updates for all workspace members.
+      this.appGateway.server
+        .to(`workspace:${workspaceId}`)
+        .emit('field_created', newField);
 
       return newField;
     } catch (error) {
@@ -95,7 +102,10 @@ export class FieldsService {
         },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'field_updated' event to the 'workspace:{field.workspaceId}' room.
+      // Emit 'field_updated' event to the 'workspace:{field.workspaceId}' room, ensuring all workspace members receive real-time updates about field changes.
+      this.appGateway.server
+        .to(`workspace:${field.workspaceId}`)
+        .emit('field_updated', updatedField);
 
       return updatedField;
     } catch (error) {
@@ -120,7 +130,9 @@ export class FieldsService {
         where: { id },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'field_deleted' event to the 'workspace:{field.workspaceId}' room.
+      this.appGateway.server
+        .to(`workspace:${field.workspaceId}`)
+        .emit('field_deleted', { id });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         // P2003 corresponds to a Foreign Key Constraint Failure.
