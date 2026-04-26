@@ -8,10 +8,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateSubjectDto } from './dto/create-subject.dto';
 import { UpdateSubjectDto } from './dto/update-subject.dto';
 import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class SubjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   // Centralized authorization guard to verify workspace access.
   private async checkMembership(userId: string, workspaceId: string) {
@@ -65,7 +69,11 @@ export class SubjectsService {
         },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'subject_created' event to the 'workspace:{workspaceId}' room.
+      // Emit 'subject_created' event to the 'workspace:{workspaceId}' room, allowing real-time updates for all workspace members.
+      this.appGateway.server
+        .to(`workspace:${workspaceId}`)
+        .emit('subject_created', newSubject);
+
       return newSubject;
     } catch (error) {
       // Gracefully handle unique constraint violations (e.g., duplicate subject names).
@@ -99,7 +107,10 @@ export class SubjectsService {
         },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'subject_updated' event to the 'workspace:{subject.workspaceId}' room.
+      this.appGateway.server
+        .to(`workspace:${subject.workspaceId}`)
+        .emit('subject_updated', updatedSubject);
+
       return updatedSubject;
     } catch (error) {
       if (
@@ -126,7 +137,9 @@ export class SubjectsService {
         where: { id },
       });
 
-      // TODO: [Feature - WebSockets] Emit 'subject_deleted' event to the 'workspace:{subject.workspaceId}' room.
+      this.appGateway.server
+        .to(`workspace:${subject.workspaceId}`)
+        .emit('subject_deleted', { id });
     } catch (error) {
       // P2003 corresponds to a Foreign Key Constraint Failure.
       // This strict check prevents the deletion of subjects that are currently assigned to active tasks.
