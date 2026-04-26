@@ -10,10 +10,14 @@ import {
   CreateFriendRequestDto,
   RespondFriendRequestDto,
 } from './dto/friend-request.dto';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class FriendsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   private sortIds(
     id1: string,
@@ -70,7 +74,9 @@ export class FriendsService {
       where: { userAId, userBId },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'friend_removed' event to 'user:{friendId}'.
+    this.appGateway.server
+      .to(`user:${friendId}`)
+      .emit('friend_removed', { removedBy: userId });
   }
 
   async listRequests(userId: string) {
@@ -114,13 +120,18 @@ export class FriendsService {
         'A friend request already exists between you two',
       );
 
-    // TODO: [Feature - WebSockets] Emit 'friend_request_received' event to 'user:{dto.targetUserId}'.
-    return await this.prisma.friendRequest.create({
+    const newRequest = await this.prisma.friendRequest.create({
       data: {
         senderId: userId,
         receiverId: dto.targetUserId,
       },
     });
+
+    this.appGateway.server
+      .to(`user:${dto.targetUserId}`)
+      .emit('friend_request_received', newRequest);
+
+    return newRequest;
   }
 
   async respondRequest(
@@ -143,6 +154,12 @@ export class FriendsService {
 
     if (dto.action === 'reject') {
       await this.prisma.friendRequest.delete({ where: { id: requestId } });
+
+      // Alert the sender that their request was rejected
+      this.appGateway.server
+        .to(`user:${request.senderId}`)
+        .emit('friend_request_updated', { requestId, status: 'rejected' });
+
       return { status: 'rejected' };
     }
 
@@ -170,14 +187,22 @@ export class FriendsService {
       throw new NotFoundException('Friendship could not be established');
     }
 
-    // TODO: [Feature - WebSockets] Emit 'friend_request_updated' to the original sender.
-
-    // Contract Alignment: Return the strict Friendship object representation,
-    // avoiding undocumented custom shapes.
-    return {
+    const friendshipResponse = {
       userAId: friendship.userAId,
       userBId: friendship.userBId,
       createdAt: friendship.createdAt.toISOString(),
     };
+
+    // Alert the sender that their request was accepted and provide the new friendship details
+    this.appGateway.server
+      .to(`user:${request.senderId}`)
+      .emit('friend_request_updated', {
+        requestId,
+        status: 'accepted',
+        friendship: friendshipResponse,
+      });
+
+    // Contract Alignment: Return the strict Friendship object representation
+    return friendshipResponse;
   }
 }
