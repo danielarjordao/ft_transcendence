@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { ChatService } from './chat.service';
-import { ChatGateway } from './gateways/chat.gateway';
+import { AppGateway } from '../realtime/app.gateway';
 import { SendMessageDto, ChatQueryDto } from './dto/chat.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
@@ -21,7 +21,7 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 export class ChatController {
   constructor(
     private readonly chatService: ChatService,
-    private readonly chatGateway: ChatGateway,
+    private readonly AppGateway: AppGateway,
   ) {}
 
   // Check that authentication extraction is centralized to enforce Fail-Fast validation.
@@ -61,7 +61,7 @@ export class ChatController {
     const userId = this.getUserId(req);
     const savedMessage = await this.chatService.sendMessage(userId, dto);
     const receiverRoom = `user:${dto.toUserId}`;
-    this.chatGateway.server
+    this.AppGateway.server
       .to(receiverRoom)
       .emit('receive_message', savedMessage);
     return savedMessage;
