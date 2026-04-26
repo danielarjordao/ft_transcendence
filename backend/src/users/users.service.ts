@@ -10,10 +10,35 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Prisma } from '../generated/prisma/client';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
+
+  // Helper method: Centralized notification logic to inform friends of user status changes, profile updates, etc.
+  private async notifyFriends(userId: string, eventName: string, payload: any) {
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [{ userAId: userId }, { userBId: userId }],
+      },
+    });
+
+    const friendIds = friendships.map((f) =>
+      f.userAId === userId ? f.userBId : f.userAId,
+    );
+
+    // Notify all friends about the event (e.g., 'profile_updated', 'status_changed') with the relevant payload.
+    friendIds.forEach((friendId) => {
+      this.appGateway.server.to(`user:${friendId}`).emit(eventName, payload);
+    });
+
+    // Also notify the user themselves if needed (e.g., for confirmation of their own action).
+    this.appGateway.server.to(`user:${userId}`).emit(eventName, payload);
+  }
 
   async getMe(userId: string) {
     // Explicit selection ensures no sensitive authentication data is exposed to the client,
@@ -68,7 +93,15 @@ export class UsersService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'profile_updated' event to all connected clients to synchronize UI elements instantly.
+    // Real-Time Update: Notify all friends about the profile update so they can see the changes immediately in their friend lists or chats.
+    await this.notifyFriends(userId, 'profile_updated', {
+      userId,
+      updates: {
+        username: updatedUser.username,
+        fullName: updatedUser.fullName,
+        bio: updatedUser.bio,
+      },
+    });
 
     return updatedUser;
   }
@@ -180,7 +213,11 @@ export class UsersService {
       select: { avatarUrl: true },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'avatar_updated' event so connected friends see the visual change immediately.
+    // Real-Time Update: Notify all friends about the avatar change so they can see the new avatar immediately in their friend lists or chats.
+    await this.notifyFriends(userId, 'avatar_updated', {
+      userId,
+      newAvatarUrl: updatedUser.avatarUrl,
+    });
 
     return updatedUser;
   }
