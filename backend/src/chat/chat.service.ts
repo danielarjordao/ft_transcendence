@@ -121,6 +121,10 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, dto: SendMessageDto) {
+    if (!dto || !dto.toUserId) {
+      throw new NotFoundException('Target user ID is required');
+    }
+
     // Fail-Fast: Ensure the target user actually exists before attempting to write message data.
     const receiver = await this.prisma.user.findUnique({
       where: { id: dto.toUserId },
