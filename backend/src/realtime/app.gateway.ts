@@ -186,4 +186,26 @@ export class AppGateway
       this.logger.error(`Failed to mark messages as read: ${errorMessage}`);
     }
   }
+
+  // Subscribe to a workspace channel when the user opens it in the frontend
+  @SubscribeMessage('join_workspace')
+  async handleJoinWorkspace(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { workspaceId: string },
+  ) {
+    const roomName = `workspace:${payload.workspaceId}`;
+    await client.join(roomName);
+    this.logger.log(`User ${client.data.user?.id} joined ${roomName}`);
+  }
+
+  // Unsubscribe when the user closes or leaves the workspace
+  @SubscribeMessage('leave_workspace')
+  async handleLeaveWorkspace(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { workspaceId: string },
+  ) {
+    const roomName = `workspace:${payload.workspaceId}`;
+    await client.leave(roomName);
+    this.logger.log(`User ${client.data.user?.id} left ${roomName}`);
+  }
 }
