@@ -7,10 +7,14 @@ import { Prisma, NotificationType } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
 import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
+import { AppGateway } from 'src/realtime/app.gateway';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   // Note: Creation of notifications is not handled here. Architecturally, notifications
   // should be generated as side-effects by other modules (e.g., TasksService, FriendsService).
@@ -74,7 +78,10 @@ export class NotificationsService {
       data: { isRead: true },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'notifications_cleared' event to 'user:{userId}' to synchronize badge counts across multiple open tabs.
+    this.appGateway.server
+      .to(`user:${userId}`)
+      .emit('notifications_cleared', { clearedAt: new Date().toISOString() });
+
     return { updated: true };
   }
 
@@ -98,8 +105,7 @@ export class NotificationsService {
       data: { isRead: readStatus },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'notification_updated' event to 'user:{userId}'.
-    return {
+    const formattedNotif = {
       id: updatedNotif.id,
       type: updatedNotif.type.toLowerCase(),
       title: updatedNotif.title,
@@ -108,6 +114,12 @@ export class NotificationsService {
       resource: updatedNotif.resource,
       createdAt: updatedNotif.createdAt,
     };
+
+    this.appGateway.server
+      .to(`user:${userId}`)
+      .emit('notification_updated', formattedNotif);
+
+    return formattedNotif;
   }
 
   async remove(userId: string, id: string) {
@@ -126,5 +138,9 @@ export class NotificationsService {
     }
 
     await this.prisma.notification.delete({ where: { id } });
+
+    this.appGateway.server
+      .to(`user:${userId}`)
+      .emit('notification_deleted', { id });
   }
 }
