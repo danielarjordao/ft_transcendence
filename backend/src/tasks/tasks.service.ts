@@ -11,10 +11,14 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { TaskWithRelations } from './interfaces/task-relations.type';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
+import { AppGateway } from 'src/realtime/app.gateway';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   // Architectural Focus: Centralized security gatekeeper.
   // Extracts the task and ensures the requesting user is a workspace member in a single query.
@@ -139,9 +143,14 @@ export class TasksService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'task_created' event to the 'workspace:{wsId}' room.
+    const formattedTask = this.formatTaskResponse(newTask);
 
-    return this.formatTaskResponse(newTask);
+    // Broadcast the creation to everyone in the workspace
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('task_created', formattedTask);
+
+    return formattedTask;
   }
 
   async findAll(userId: string, wsId: string, query: ListTasksQueryDto) {
@@ -261,16 +270,35 @@ export class TasksService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'task_updated' event to 'workspace:{existingTask.workspaceId}'.
-    // TODO: [Feature - WebSockets] If 'newFieldId' differs from 'existingTask.fieldId', emit 'task_moved'.
+    const formattedUpdatedTask = this.formatTaskResponse(updatedTask);
 
-    return this.formatTaskResponse(updatedTask);
+    // Broadcast generic update
+    this.appGateway.server
+      .to(`workspace:${existingTask.workspaceId}`)
+      .emit('task_updated', formattedUpdatedTask);
+
+    // Smart Event: Detect Drag & Drop between columns
+    if (newFieldId && newFieldId !== existingTask.fieldId) {
+      this.appGateway.server
+        .to(`workspace:${existingTask.workspaceId}`)
+        .emit('task_moved', {
+          taskId: updatedTask.id,
+          oldFieldId: existingTask.fieldId,
+          newFieldId: newFieldId,
+          task: formattedUpdatedTask,
+        });
+    }
+
+    return formattedUpdatedTask;
   }
 
   async remove(userId: string, taskId: string) {
     const _task = await this.getTaskAndCheckAccess(userId, taskId);
     await this.prisma.task.delete({ where: { id: taskId } });
 
-    // TODO: [Feature - WebSockets] Emit 'task_deleted' event to 'workspace:{task.workspaceId}'.
+    // Notify clients to remove the task from their UI
+    this.appGateway.server
+      .to(`workspace:${_task.workspaceId}`)
+      .emit('task_deleted', { id: taskId });
   }
 }
