@@ -1,18 +1,23 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TasksService } from './tasks.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CommentWithAuthor } from './interfaces/comments-response.type';
+import { AppGateway } from 'src/realtime/app.gateway';
 
 @Injectable()
 export class CommentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tasksService: TasksService,
+    private readonly appGateway: AppGateway,
   ) {}
 
-  // Fim do erro "any"! Agora tem tipagem estrita.
   private formatCommentResponse(comment: CommentWithAuthor) {
     return {
       id: comment.id,
@@ -41,7 +46,7 @@ export class CommentsService {
   }
 
   async create(userId: string, taskId: string, dto: CreateCommentDto) {
-    await this.tasksService.findOne(userId, taskId);
+    const task = await this.tasksService.findOne(userId, taskId);
 
     const comment = await this.prisma.comment.create({
       data: { taskId, authorId: userId, text: dto.text },
@@ -50,15 +55,21 @@ export class CommentsService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'comment_added' event to the respective workspace room.
+    const formattedComment = this.formatCommentResponse(comment);
+
+    this.appGateway.server
+      .to(`workspace:${task.workspaceId}`)
+      .emit('comment_added', { taskId, comment: formattedComment });
+
     // TODO: [Feature - Notifications] Trigger an internal notification for users tagged in the comment text.
 
-    return this.formatCommentResponse(comment);
+    return formattedComment;
   }
 
   async update(userId: string, commentId: string, dto: UpdateCommentDto) {
     const existingComment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: { task: { select: { workspaceId: true } } },
     });
 
     if (existingComment?.authorId !== userId) {
@@ -73,24 +84,41 @@ export class CommentsService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'comment_updated' event to the respective workspace room.
+    const formattedComment = this.formatCommentResponse(updatedComment);
 
-    return this.formatCommentResponse(updatedComment);
+    this.appGateway.server
+      .to(`workspace:${existingComment.task.workspaceId}`)
+      .emit('comment_updated', {
+        taskId: existingComment.taskId,
+        comment: formattedComment,
+      });
+
+    return formattedComment;
   }
 
   async remove(userId: string, commentId: string) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
+      include: { task: { select: { workspaceId: true } } },
     });
+
+    if (!comment) {
+      throw new NotFoundException('Comment not found');
+    }
 
     if (comment?.authorId !== userId) {
       throw new ForbiddenException('You can only delete your own comments');
     }
 
-    const _deletedComment = await this.prisma.comment.delete({
+    await this.prisma.comment.delete({
       where: { id: commentId },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'comment_deleted' event to the workspace room.
+    this.appGateway.server
+      .to(`workspace:${comment.task.workspaceId}`)
+      .emit('comment_deleted', {
+        taskId: comment.taskId,
+        commentId: comment.id,
+      });
   }
 }
