@@ -76,7 +76,7 @@ export class FriendsService {
 
     this.appGateway.server
       .to(`user:${friendId}`)
-      .emit('friend_removed', { removedBy: userId });
+      .emit('friend_removed', { userId });
   }
 
   async listRequests(userId: string) {
@@ -207,11 +207,9 @@ export class FriendsService {
         senderId: request.senderId,
         receiverId: request.receiverId,
         status: 'accepted',
-        friendship: friendshipResponse,
         createdAt: request.createdAt.toISOString(),
       });
 
-    // Contract Alignment: Return the strict Friendship object representation
     return friendshipResponse;
   }
 
