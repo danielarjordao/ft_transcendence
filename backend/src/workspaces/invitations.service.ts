@@ -10,7 +10,7 @@ import {
   WorkspaceInvitationStatus,
   WorkspaceMemberRole,
 } from '../generated/prisma/client';
-import { AppGateway } from 'src/realtime/app.gateway';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class InvitationsService {
@@ -88,7 +88,7 @@ export class InvitationsService {
     if (inviteeUser) {
       this.appGateway.server
         .to(`user:${inviteeUser.id}`)
-        .emit('invitation_received', formattedInvitation);
+        .emit('workspace_invitation_received', formattedInvitation);
     }
     // Architectural Focus: Normalizing the response to match Section 3.7 of API.md
     return formattedInvitation;
@@ -175,7 +175,7 @@ export class InvitationsService {
     if (updateDto.action === 'accept' && result.newMember) {
       this.appGateway.server
         .to(`workspace:${invitation.workspaceId}`)
-        .emit('member_joined', {
+        .emit('member_added', {
           userId: result.newMember.userId,
           username: result.newMember.user.username,
           fullName: result.newMember.user.fullName,
