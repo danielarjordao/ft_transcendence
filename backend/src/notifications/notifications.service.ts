@@ -161,7 +161,7 @@ export class NotificationsService {
       message: updatedNotif.message,
       read: updatedNotif.isRead,
       resource: updatedNotif.resource,
-      createdAt: updatedNotif.createdAt,
+      createdAt: updatedNotif.createdAt.toISOString(),
     };
 
     this.appGateway.server
