@@ -132,7 +132,7 @@ export class FieldsService {
 
       this.appGateway.server
         .to(`workspace:${field.workspaceId}`)
-        .emit('field_deleted', { id });
+        .emit('field_deleted', { fieldId: id });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         // P2003 corresponds to a Foreign Key Constraint Failure.
