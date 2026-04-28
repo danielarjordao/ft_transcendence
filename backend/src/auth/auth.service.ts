@@ -167,7 +167,7 @@ export class AuthService {
   forgotPassword(_dto: ForgotPasswordDto) {
     // TODO: [Feature - Password Reset] Fetch user by email. If exists, generate a cryptographically secure reset token.
     // TODO: [Feature - Password Reset] Persist the reset token and expiration date in the database.
-    // TODO: [Feature - Notifications] Trigger the external email sending service (e.g., Nodemailer/SendGrid).
+    // TODO: [Feature - Emails] Trigger the external email sending service (e.g., Nodemailer/SendGrid).
     throw new NotImplementedException(
       'Forgot Password method not implemented yet.',
     );
