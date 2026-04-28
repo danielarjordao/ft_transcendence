@@ -12,12 +12,15 @@ import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { TaskWithRelations } from './interfaces/task-relations.type';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
 import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // Architectural Focus: Centralized security gatekeeper.
@@ -152,6 +155,15 @@ export class TasksService {
     this.appGateway.server
       .to(`workspace:${wsId}`)
       .emit('task_created', formattedTask);
+
+    if (newTask.assigneeId && newTask.assigneeId !== userId) {
+      await this.notificationsService.create(newTask.assigneeId, {
+        type: NotificationType.TASK_ASSIGNED,
+        title: 'New Task Assigned',
+        message: `You have been assigned to the task: ${newTask.title}`,
+        resource: { taskId: newTask.id, workspaceId: wsId },
+      });
+    }
 
     return formattedTask;
   }
@@ -295,6 +307,22 @@ export class TasksService {
           newStatus: newStatusSlug,
           movedBy: userId,
         });
+    }
+
+    if (
+      updatedTask.assigneeId &&
+      updatedTask.assigneeId !== existingTask.assigneeId &&
+      updatedTask.assigneeId !== userId
+    ) {
+      await this.notificationsService.create(updatedTask.assigneeId, {
+        type: NotificationType.TASK_ASSIGNED,
+        title: 'Task Reassigned',
+        message: `You are now responsible for the task: ${updatedTask.title}`,
+        resource: {
+          taskId: updatedTask.id,
+          workspaceId: existingTask.workspaceId,
+        },
+      });
     }
 
     return formattedUpdatedTask;
