@@ -11,12 +11,15 @@ import {
   WorkspaceMemberRole,
 } from '../generated/prisma/client';
 import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(
@@ -89,7 +92,15 @@ export class InvitationsService {
       this.appGateway.server
         .to(`user:${inviteeUser.id}`)
         .emit('workspace_invitation_received', formattedInvitation);
+
+      await this.notificationsService.create(inviteeUser.id, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Workspace Invitation',
+        message: `You have been invited to join a new workspace.`,
+        resource: { invitationId: result.id, workspaceId: result.workspaceId },
+      });
     }
+
     // Architectural Focus: Normalizing the response to match Section 3.7 of API.md
     return formattedInvitation;
   }
@@ -182,6 +193,20 @@ export class InvitationsService {
           role: result.newMember.role.toLowerCase(),
           status: result.newMember.user.isOnline ? 'online' : 'offline',
         });
+
+      await this.notificationsService.create(invitation.inviterId, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Invitation Accepted',
+        message: `${result.newMember.user.username} accepted your workspace invitation.`,
+        resource: { workspaceId: invitation.workspaceId, newMemberId: userId },
+      });
+    } else if (updateDto.action === 'decline') {
+      await this.notificationsService.create(invitation.inviterId, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Invitation Declined',
+        message: `Your invitation sent to ${invitation.inviteeEmail} was declined.`,
+        resource: { workspaceId: invitation.workspaceId },
+      });
     }
 
     // Explicit mapping to decouple DB enums from the API contract.
