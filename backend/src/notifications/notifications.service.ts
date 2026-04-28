@@ -16,9 +16,41 @@ export class NotificationsService {
     private readonly appGateway: AppGateway,
   ) {}
 
-  // Note: Creation of notifications is not handled here. Architecturally, notifications
-  // should be generated as side-effects by other modules (e.g., TasksService, FriendsService).
+  async create(
+    userId: string,
+    data: {
+      type: NotificationType;
+      title: string;
+      message: string;
+      resource?: Prisma.InputJsonValue;
+    },
+  ) {
+    const notif = await this.prisma.notification.create({
+      data: {
+        userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        resource: data.resource === undefined ? Prisma.JsonNull : data.resource,
+      },
+    });
 
+    const formattedNotif = {
+      id: notif.id,
+      type: notif.type.toLowerCase(),
+      title: notif.title,
+      message: notif.message,
+      read: notif.isRead,
+      resource: notif.resource,
+      createdAt: notif.createdAt.toISOString(),
+    };
+
+    this.appGateway.server
+      .to(`user:${userId}`)
+      .emit('notification_received', formattedNotif);
+
+    return formattedNotif;
+  }
   async findAll(userId: string, query: ListNotificationsQueryDto) {
     const limit = query.limit || 20;
     const offset = query.offset || 0;
@@ -73,14 +105,31 @@ export class NotificationsService {
   }
 
   async markAllAsRead(userId: string) {
+    // Fetch the unread notifications first
+    const unreadNotifications = await this.prisma.notification.findMany({
+      where: { userId, isRead: false },
+    });
+
+    if (unreadNotifications.length === 0) return { updated: true };
+
+    // 2Mark them as read in the database
     await this.prisma.notification.updateMany({
       where: { userId, isRead: false },
       data: { isRead: true },
     });
 
-    this.appGateway.server
-      .to(`user:${userId}`)
-      .emit('notifications_cleared', { clearedAt: new Date().toISOString() });
+    // Emit 'notification_updated' for each modified notification
+    for (const n of unreadNotifications) {
+      this.appGateway.server.to(`user:${userId}`).emit('notification_updated', {
+        id: n.id,
+        type: n.type.toLowerCase(),
+        title: n.title,
+        message: n.message,
+        read: true,
+        resource: n.resource,
+        createdAt: n.createdAt.toISOString(),
+      });
+    }
 
     return { updated: true };
   }
