@@ -111,7 +111,7 @@ export class WorkspacesService {
     const workspace = await this.prisma.workspace.findFirst({
       where: {
         id: wsId,
-        members: { some: { userId: userId } }, // <-- SECURITY GATEKEEPER RESTORED
+        members: { some: { userId: userId } },
       },
       include: {
         members: {
@@ -298,6 +298,6 @@ export class WorkspacesService {
 
     this.appGateway.server
       .to(`workspace:${wsId}`)
-      .emit('member_removed', { userId: memberId });
+      .emit('member_removed', { memberId });
   }
 }
