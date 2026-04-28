@@ -8,7 +8,9 @@ import { TasksService } from './tasks.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { CommentWithAuthor } from './interfaces/comments-response.type';
-import { AppGateway } from 'src/realtime/app.gateway';
+import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class CommentsService {
@@ -16,6 +18,7 @@ export class CommentsService {
     private readonly prisma: PrismaService,
     private readonly tasksService: TasksService,
     private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private formatCommentResponse(comment: CommentWithAuthor) {
@@ -61,8 +64,38 @@ export class CommentsService {
       .to(`workspace:${task.workspaceId}`)
       .emit('comment_added', { taskId, comment: formattedComment });
 
-    // TODO: [Feature - Notifications] Trigger an internal notification for users tagged in the comment text.
+    // Process mentions in the comment text (e.g., @username)
+    const mentionRegex = /(?<=^|\s)@([a-zA-Z0-9_]+)/g;
+    const extractedUsernames = Array.from(
+      dto.text.matchAll(mentionRegex),
+      (m) => m[1],
+    );
 
+    // Remove duplicates to avoid multiple notifications for the same user if mentioned multiple times
+    const uniqueUsernames = [...new Set(extractedUsernames)];
+
+    if (uniqueUsernames.length > 0) {
+      // Find user IDs for the mentioned usernames, excluding the comment author
+      const mentionedUsers = await this.prisma.user.findMany({
+        where: {
+          username: { in: uniqueUsernames },
+          id: { not: userId },
+        },
+        select: { id: true },
+      });
+
+      // Create a notification for each mentioned user
+      await Promise.all(
+        mentionedUsers.map((u) =>
+          this.notificationsService.create(u.id, {
+            type: NotificationType.MENTION,
+            title: 'Nova Menção',
+            message: `${formattedComment.author.username} mencionou-te num comentário.`,
+            resource: { taskId, commentId: comment.id }, // Contexto rico para o frontend navegar
+          }),
+        ),
+      );
+    }
     return formattedComment;
   }
 
