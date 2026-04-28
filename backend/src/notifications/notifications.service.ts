@@ -112,24 +112,27 @@ export class NotificationsService {
 
     if (unreadNotifications.length === 0) return { updated: true };
 
-    // 2Mark them as read in the database
+    // Mark them as read in the database
     await this.prisma.notification.updateMany({
       where: { userId, isRead: false },
       data: { isRead: true },
     });
 
-    // Emit 'notification_updated' for each modified notification
-    for (const n of unreadNotifications) {
-      this.appGateway.server.to(`user:${userId}`).emit('notification_updated', {
-        id: n.id,
-        type: n.type.toLowerCase(),
-        title: n.title,
-        message: n.message,
-        read: true,
-        resource: n.resource,
-        createdAt: n.createdAt.toISOString(),
-      });
-    }
+    // Format the notifications for emitting after the update
+    const formattedUnread = unreadNotifications.map((n) => ({
+      id: n.id,
+      type: n.type.toLowerCase(),
+      title: n.title,
+      message: n.message,
+      read: true,
+      resource: n.resource,
+      createdAt: n.createdAt.toISOString(),
+    }));
+
+    // Emit 'notification_updated' events for each updated notification
+    this.appGateway.server
+      .to(`user:${userId}`)
+      .emit('notifications_updated', formattedUnread);
 
     return { updated: true };
   }
