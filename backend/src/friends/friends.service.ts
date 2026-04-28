@@ -11,12 +11,15 @@ import {
   RespondFriendRequestDto,
 } from './dto/friend-request.dto';
 import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class FriendsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private sortIds(
@@ -131,6 +134,13 @@ export class FriendsService {
       .to(`user:${dto.targetUserId}`)
       .emit('friend_request_received', newRequest);
 
+    await this.notificationsService.create(dto.targetUserId, {
+      type: NotificationType.FRIEND_REQUEST,
+      title: 'New Friend Request',
+      message: 'You have received a new friend request.',
+      resource: { requestId: newRequest.id, senderId: userId },
+    });
+
     return newRequest;
   }
 
@@ -165,6 +175,13 @@ export class FriendsService {
           status: 'rejected',
           createdAt: request.createdAt.toISOString(),
         });
+
+      await this.notificationsService.create(request.senderId, {
+        type: NotificationType.FRIEND_REQUEST,
+        title: 'Friend Request Declined',
+        message: 'Your friend request was declined.',
+        resource: { requestId: request.id },
+      });
 
       return { status: 'rejected' };
     }
@@ -209,6 +226,13 @@ export class FriendsService {
         status: 'accepted',
         createdAt: request.createdAt.toISOString(),
       });
+
+    await this.notificationsService.create(request.senderId, {
+      type: NotificationType.FRIEND_REQUEST,
+      title: 'Friend Request Accepted',
+      message: 'Your friend request was accepted.',
+      resource: { requestId: request.id, newFriendId: userId },
+    });
 
     return friendshipResponse;
   }
