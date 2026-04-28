@@ -42,6 +42,9 @@ export class AppGateway
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
+      /*
+        * Architectural Requirement: Support multiple token locations for maximum client compatibility
+
       const queryToken = client.handshake.query?.token as string;
       const authPayloadToken = client.handshake.auth?.token as string;
       const authHeader = client.handshake.headers.authorization;
@@ -50,10 +53,13 @@ export class AppGateway
         : authHeader;
 
       const token = queryToken || authPayloadToken || headerToken;
+      */
+
+      const token = client.handshake.query?.token as string;
 
       if (!token) {
         throw new UnauthorizedException(
-          'Missing authentication token in handshake auth',
+          'Missing authentication token in query parameters (?token=...)',
         );
       }
 
