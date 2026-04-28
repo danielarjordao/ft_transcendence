@@ -85,7 +85,7 @@ export class NotificationsService {
       message: n.message,
       read: n.isRead,
       resource: n.resource,
-      createdAt: n.createdAt,
+      createdAt: n.createdAt.toISOString(),
     }));
 
     return createPaginatedResponse(
