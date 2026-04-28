@@ -158,7 +158,13 @@ export class FriendsService {
       // Alert the sender that their request was rejected
       this.appGateway.server
         .to(`user:${request.senderId}`)
-        .emit('friend_request_updated', { requestId, status: 'rejected' });
+        .emit('friend_request_updated', {
+          id: request.id,
+          senderId: request.senderId,
+          receiverId: request.receiverId,
+          status: 'rejected',
+          createdAt: request.createdAt.toISOString(),
+        });
 
       return { status: 'rejected' };
     }
@@ -197,12 +203,29 @@ export class FriendsService {
     this.appGateway.server
       .to(`user:${request.senderId}`)
       .emit('friend_request_updated', {
-        requestId,
+        id: request.id,
+        senderId: request.senderId,
+        receiverId: request.receiverId,
         status: 'accepted',
         friendship: friendshipResponse,
+        createdAt: request.createdAt.toISOString(),
       });
 
     // Contract Alignment: Return the strict Friendship object representation
     return friendshipResponse;
+  }
+
+  // Real-time Presence Updates: Notify friends when a user goes online or offline.
+  async notifyPresenceChange(userId: string, status: 'online' | 'offline') {
+    const friendships = await this.prisma.friendship.findMany({
+      where: { OR: [{ userAId: userId }, { userBId: userId }] },
+    });
+
+    for (const f of friendships) {
+      const friendId = f.userAId === userId ? f.userBId : f.userAId;
+      this.appGateway.server
+        .to(`user:${friendId}`)
+        .emit('friend_presence_changed', { userId, status });
+    }
   }
 }
