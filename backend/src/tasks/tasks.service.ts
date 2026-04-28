@@ -11,7 +11,7 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { TaskWithRelations } from './interfaces/task-relations.type';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
-import { AppGateway } from 'src/realtime/app.gateway';
+import { AppGateway } from '../realtime/app.gateway';
 
 @Injectable()
 export class TasksService {
@@ -49,7 +49,10 @@ export class TasksService {
   private async getTaskAndCheckAccess(userId: string, taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      include: { workspace: { include: { members: { where: { userId } } } } },
+      include: {
+        workspace: { include: { members: { where: { userId } } } },
+        field: true,
+      },
     });
 
     if (!task) throw new NotFoundException('Task not found');
@@ -279,13 +282,18 @@ export class TasksService {
 
     // Smart Event: Detect Drag & Drop between columns
     if (newFieldId && newFieldId !== existingTask.fieldId) {
+      const oldStatusSlug =
+        existingTask.field?.name?.toLowerCase().replace(/\s+/g, '_') ||
+        'unknown';
+      const newStatusSlug = dto.status;
+
       this.appGateway.server
         .to(`workspace:${existingTask.workspaceId}`)
         .emit('task_moved', {
           taskId: updatedTask.id,
-          oldFieldId: existingTask.fieldId,
-          newFieldId: newFieldId,
-          task: formattedUpdatedTask,
+          oldStatus: oldStatusSlug,
+          newStatus: newStatusSlug,
+          movedBy: userId,
         });
     }
 
@@ -299,6 +307,6 @@ export class TasksService {
     // Notify clients to remove the task from their UI
     this.appGateway.server
       .to(`workspace:${_task.workspaceId}`)
-      .emit('task_deleted', { id: taskId });
+      .emit('task_deleted', { taskId });
   }
 }
