@@ -2,10 +2,19 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  NotFoundException,
   NotImplementedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { createHmac, randomBytes } from 'crypto';
+import * as nodemailer from 'nodemailer';
+import {
+  SessionStatus,
+  type Session,
+  type User,
+} from '../generated/prisma/client';
+import { AuthProvider } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SignUpDto,
@@ -14,6 +23,12 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/auth.dto';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
+
+interface SessionContext {
+  userAgent?: string;
+  ipAddress?: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -22,34 +37,208 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  // Centralized token generation ensures both tokens are created atomically
-  // and signed with their respective environment secrets.
+  private getAccessTokenSecret(): string {
+    return process.env.JWT_ACCESS_SECRET || 'default_dev_secret';
+  }
+
+  private getRefreshTokenSecret(): string {
+    return process.env.JWT_REFRESH_SECRET || 'default_refresh_secret';
+  }
+
+  private getAccessTokenExpiresIn(): string {
+    return process.env.JWT_ACCESS_EXPIRES_IN || '15min';
+  }
+
+  private getRefreshTokenExpiresIn(): string {
+    return process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+  }
+
+  private getPasswordResetExpiresMinutes(): number {
+    const rawValue = Number(process.env.PASSWORD_RESET_EXPIRES_MINUTES || '30');
+
+    return Number.isFinite(rawValue) && rawValue > 0 ? rawValue : 30;
+  }
+
+  private getPasswordResetBaseUrl(): string {
+    return (
+      process.env.PASSWORD_RESET_FRONTEND_URL ||
+      'http://localhost:5173/reset-password'
+    );
+  }
+
+  private serializeUser(user: User) {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName || '',
+      username: user.username,
+      bio: user.bio || '',
+      avatarUrl: user.avatarUrl,
+      accountType: user.accountType,
+    };
+  }
+
+  private async generateAccessToken(userId: string, email: string) {
+    const payload: JwtPayload = { sub: userId, email };
+
+    return this.jwtService.signAsync(payload, {
+      secret: this.getAccessTokenSecret(),
+      expiresIn: this.getAccessTokenExpiresIn(),
+    });
+  }
+
+  private async generateRefreshToken(userId: string, email: string) {
+    const payload = { sub: userId, email };
+
+    return this.jwtService.signAsync(payload, {
+      secret: this.getRefreshTokenSecret(),
+      expiresIn: this.getRefreshTokenExpiresIn(),
+    });
+  }
+
+  // Centralized token generation keeps both tokens aligned with the same payload.
   private async generateTokens(
     userId: string,
     email: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload = { sub: userId, email };
-
-    const accessSecret: string =
-      process.env.JWT_ACCESS_SECRET || 'default_dev_secret';
-    const refreshSecret: string =
-      process.env.JWT_REFRESH_SECRET || 'default_refresh_secret';
-
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: accessSecret,
-        expiresIn: '1h',
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: refreshSecret,
-        expiresIn: '7d',
-      }),
+      this.generateAccessToken(userId, email),
+      this.generateRefreshToken(userId, email),
     ]);
 
     return { accessToken, refreshToken };
   }
 
-  async signUp(dto: SignUpDto) {
+  private async verifyRefreshToken(refreshToken: string): Promise<JwtPayload> {
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(
+        refreshToken,
+        {
+          secret: this.getRefreshTokenSecret(),
+        },
+      );
+
+      if (!payload.sub || typeof payload.sub !== 'string') {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      return payload;
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+  }
+
+  private hashToken(token: string): string {
+    return createHmac('sha256', process.env.AUTH_TOKEN_PEPPER || 'dev_pepper')
+      .update(token)
+      .digest('hex');
+  }
+
+  private createRandomToken(): string {
+    return randomBytes(32).toString('base64url');
+  }
+
+  private calculateExpiration(duration: string): Date {
+    const match = duration.match(/^(\d+)([smhd])$/);
+
+    if (!match) {
+      return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    }
+
+    const value = Number(match[1]);
+    const unit = match[2];
+
+    const multipliers: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+
+    return new Date(Date.now() + value * multipliers[unit]);
+  }
+
+  private calculateExpirationFromMinutes(minutes: number): Date {
+    return new Date(Date.now() + minutes * 60 * 1000);
+  }
+
+  private buildPasswordResetLink(token: string): string {
+    const baseUrl = this.getPasswordResetBaseUrl();
+    const separator = baseUrl.includes('?') ? '&' : '?';
+
+    return `${baseUrl}${separator}token=${encodeURIComponent(token)}`;
+  }
+
+  private async sendPasswordResetEmail(
+    email: string,
+    resetLink: string,
+  ): Promise<void> {
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = Number(process.env.SMTP_PORT || '587');
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPassword = process.env.SMTP_PASSWORD;
+    const smtpFrom = process.env.SMTP_FROM || 'no-reply@fazelo.local';
+
+    if (!smtpHost) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[auth] Password reset link for ${email}: ${resetLink}`);
+      }
+
+      return;
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth:
+        smtpUser && smtpPassword
+          ? {
+              user: smtpUser,
+              pass: smtpPassword,
+            }
+          : undefined,
+    });
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: email,
+      subject: 'Reset your password',
+      text: `Use this link to reset your password: ${resetLink}`,
+    });
+  }
+
+  private async createSession(
+    userId: string,
+    refreshToken: string,
+    context?: SessionContext,
+  ) {
+    return this.prisma.session.create({
+      data: {
+        userId,
+        refreshTokenHash: this.hashToken(refreshToken),
+        expiresAt: this.calculateExpiration(this.getRefreshTokenExpiresIn()),
+        userAgent: context?.userAgent,
+        ipAddress: context?.ipAddress,
+      },
+    });
+  }
+
+  private async revokeSession(
+    sessionId: string,
+    replacedBySessionId?: string,
+  ): Promise<Session> {
+    return this.prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        status: SessionStatus.REVOKED,
+        revokedAt: new Date(),
+        replacedBySessionId,
+      },
+    });
+  }
+
+  async signUp(dto: SignUpDto, context?: SessionContext) {
     // Fail-Fast: Verify the database for existing constraints before initiating hashing.
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -68,6 +257,7 @@ export class AuthService {
         email: dto.email,
         username: dto.username,
         fullName: dto.fullName,
+        lastLoginAt: new Date(),
         // TODO: [Feature - OAuth 42] Add logic to determine accountType dynamically based on the registration origin.
         accountType: 'standard',
         authAccounts: {
@@ -81,25 +271,15 @@ export class AuthService {
     });
 
     const tokens = await this.generateTokens(newUser.id, newUser.email);
-
-    // TODO: [Feature - Session Management] Hash the generated refreshToken and store it in the database.
-    // This allows the system to revoke specific tokens during the logout process.
+    await this.createSession(newUser.id, tokens.refreshToken, context);
 
     return {
       ...tokens,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        fullName: newUser.fullName || '',
-        username: newUser.username,
-        bio: '',
-        avatarUrl: null,
-        accountType: newUser.accountType,
-      },
+      user: this.serializeUser(newUser),
     };
   }
 
-  async signIn(dto: SignInDto) {
+  async signIn(dto: SignInDto, context?: SessionContext) {
     // Verify that the query explicitly requires the LOCAL authentication provider.
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -132,54 +312,206 @@ export class AuthService {
     // If yes, abort full token generation and return a partial response indicating an OTP code is required.
 
     const tokens = await this.generateTokens(user.id, user.email);
-
-    // TODO: [Feature - Session Management] Hash and store the generated refreshToken in the database.
+    await Promise.all([
+      this.createSession(user.id, tokens.refreshToken, context),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
 
     return {
       ...tokens,
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName || '',
-        username: user.username,
-        bio: '',
-        avatarUrl: null,
-        accountType: user.accountType,
-      },
+      user: this.serializeUser(user),
     };
   }
 
-  refresh(_dto: RefreshTokenDto) {
-    // TODO: [Feature - Session Management] Verify the provided refresh token signature using @nestjs/jwt.
-    // TODO: [Feature - Session Management] Extract the payload, fetch the user, and validate against the stored hash.
-    // TODO: [Feature - Session Management] Generate and return a new token pair.
+  async refresh(dto: RefreshTokenDto) {
+    const payload = await this.verifyRefreshToken(dto.refreshToken);
+    const refreshTokenHash = this.hashToken(dto.refreshToken);
 
-    throw new NotImplementedException(
-      'Refresh Token method not implemented yet.',
-    );
+    const session = await this.prisma.session.findUnique({
+      where: { refreshTokenHash },
+    });
+
+    if (
+      !session ||
+      session.status !== SessionStatus.ACTIVE ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      session.userId !== payload.sub
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: session.userId },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email);
+    await this.prisma.$transaction(async (tx) => {
+      const newSession = await tx.session.create({
+        data: {
+          userId: user.id,
+          refreshTokenHash: this.hashToken(tokens.refreshToken),
+          expiresAt: this.calculateExpiration(this.getRefreshTokenExpiresIn()),
+          userAgent: session.userAgent,
+          ipAddress: session.ipAddress,
+        },
+      });
+
+      await tx.session.update({
+        where: { id: session.id },
+        data: {
+          status: SessionStatus.REVOKED,
+          revokedAt: new Date(),
+          replacedBySessionId: newSession.id,
+        },
+      });
+    });
+
+    return tokens;
   }
 
-  logout(_dto: RefreshTokenDto) {
-    // TODO: [Feature - Session Management] Verify the token and invalidate it by removing its hash from the database.
-    throw new NotImplementedException('Logout method not implemented yet.');
+  async logout(dto: RefreshTokenDto): Promise<void> {
+    const refreshTokenHash = this.hashToken(dto.refreshToken);
+    const session = await this.prisma.session.findUnique({
+      where: { refreshTokenHash },
+    });
+
+    if (
+      !session ||
+      session.status !== SessionStatus.ACTIVE ||
+      session.revokedAt
+    ) {
+      return;
+    }
+
+    await this.revokeSession(session.id);
   }
 
-  forgotPassword(_dto: ForgotPasswordDto) {
-    // TODO: [Feature - Password Reset] Fetch user by email. If exists, generate a cryptographically secure reset token.
-    // TODO: [Feature - Password Reset] Persist the reset token and expiration date in the database.
-    // TODO: [Feature - Notifications] Trigger the external email sending service (e.g., Nodemailer/SendGrid).
-    throw new NotImplementedException(
-      'Forgot Password method not implemented yet.',
-    );
+  async forgotPassword(dto: ForgotPasswordDto): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      return;
+    }
+
+    const localAuthAccount = await this.prisma.authAccount.findUnique({
+      where: {
+        userId_provider: {
+          userId: user.id,
+          provider: AuthProvider.LOCAL,
+        },
+      },
+    });
+
+    if (!localAuthAccount) {
+      return;
+    }
+
+    const resetToken = this.createRandomToken();
+    const tokenHash = this.hashToken(resetToken);
+    const resetLink = this.buildPasswordResetLink(resetToken);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          usedAt: null,
+        },
+        data: {
+          usedAt: new Date(),
+        },
+      });
+
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: this.calculateExpirationFromMinutes(
+            this.getPasswordResetExpiresMinutes(),
+          ),
+        },
+      });
+    });
+
+    await this.sendPasswordResetEmail(user.email, resetLink);
   }
 
-  resetPassword(_dto: ResetPasswordDto) {
-    // TODO: [Feature - Password Reset] Find the user associated with the token. Validate expiration.
-    // TODO: [Feature - Password Reset] Hash the new password with bcrypt and update the database record.
-    // TODO: [Feature - Password Reset] Invalidate and delete the used reset token.
-    throw new NotImplementedException(
-      'Reset Password method not implemented yet.',
-    );
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    const tokenHash = this.hashToken(dto.token);
+    const passwordResetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!passwordResetToken || passwordResetToken.usedAt) {
+      throw new NotFoundException('Reset token not found');
+    }
+
+    if (passwordResetToken.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Reset token expired');
+    }
+
+    const localAuthAccount = await this.prisma.authAccount.findUnique({
+      where: {
+        userId_provider: {
+          userId: passwordResetToken.userId,
+          provider: AuthProvider.LOCAL,
+        },
+      },
+    });
+
+    if (!localAuthAccount) {
+      throw new NotFoundException('Local auth account not found');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.authAccount.update({
+        where: { id: localAuthAccount.id },
+        data: {
+          passwordHash: hashedPassword,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: passwordResetToken.userId },
+        data: {
+          passwordChangedAt: now,
+        },
+      });
+
+      await tx.passwordResetToken.updateMany({
+        where: {
+          userId: passwordResetToken.userId,
+          usedAt: null,
+        },
+        data: {
+          usedAt: now,
+        },
+      });
+
+      await tx.session.updateMany({
+        where: {
+          userId: passwordResetToken.userId,
+          status: SessionStatus.ACTIVE,
+          revokedAt: null,
+        },
+        data: {
+          status: SessionStatus.REVOKED,
+          revokedAt: now,
+        },
+      });
+    });
   }
 
   oauth42Callback(_code: string) {

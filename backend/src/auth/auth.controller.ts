@@ -3,11 +3,13 @@ import {
   Get,
   Post,
   Body,
+  Req,
   HttpCode,
   HttpStatus,
   Query,
   Redirect,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import {
   SignUpDto,
@@ -21,16 +23,25 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  private getSessionContext(req: Request) {
+    const userAgent = req.headers['user-agent'];
+
+    return {
+      userAgent: Array.isArray(userAgent) ? userAgent[0] : userAgent,
+      ipAddress: req.ip,
+    };
+  }
+
   @Post('sign-up')
-  signUp(@Body() dto: SignUpDto) {
-    return this.authService.signUp(dto);
+  signUp(@Body() dto: SignUpDto, @Req() req: Request) {
+    return this.authService.signUp(dto, this.getSessionContext(req));
   }
 
   @Post('sign-in')
   // Verify that sign-in returns 200 OK, as it authorizes an existing resource rather than creating a new entity.
   @HttpCode(HttpStatus.OK)
-  signIn(@Body() dto: SignInDto) {
-    return this.authService.signIn(dto);
+  signIn(@Body() dto: SignInDto, @Req() req: Request) {
+    return this.authService.signIn(dto, this.getSessionContext(req));
   }
 
   @Post('refresh')
@@ -43,20 +54,20 @@ export class AuthController {
   // Verify that 204 No Content is used here to indicate the successful teardown of the session.
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@Body() dto: RefreshTokenDto) {
-    this.authService.logout(dto);
+    return this.authService.logout(dto);
   }
 
   @Post('forgot-password')
   // Verify that 202 Accepted is used to indicate an asynchronous background process (email dispatch).
   @HttpCode(HttpStatus.ACCEPTED)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
-    this.authService.forgotPassword(dto);
+    return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   resetPassword(@Body() dto: ResetPasswordDto) {
-    this.authService.resetPassword(dto);
+    return this.authService.resetPassword(dto);
   }
 
   @Get('42')
