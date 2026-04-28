@@ -9,7 +9,7 @@ import { AppGateway } from '../realtime/app.gateway';
   // Verify that PrismaModule is imported. The ChatService relies heavily on PrismaService
   // to fetch users and messages. Without this, the application will crash on startup.
   // Import JwtModule to allow token verification inside the Gateway
-  // TODO: Refactor to use JwtModule.register with proper configuration
+  // TODO: [Feature - Auth] Refactor to use JwtModule.register with proper configuration.
   imports: [PrismaModule, JwtModule.register({})],
   controllers: [ChatController],
   providers: [ChatService, AppGateway],
