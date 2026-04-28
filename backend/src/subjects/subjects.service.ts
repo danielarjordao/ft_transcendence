@@ -76,7 +76,7 @@ export class SubjectsService {
 
       return newSubject;
     } catch (error) {
-      // Gracefully handle unique constraint violations (e.g., duplicate subject names).
+      // Handle unique constraint violations (e.g., duplicate subject names).
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2002'
@@ -139,7 +139,7 @@ export class SubjectsService {
 
       this.appGateway.server
         .to(`workspace:${subject.workspaceId}`)
-        .emit('subject_deleted', { id });
+        .emit('subject_deleted', { subjectId: id });
     } catch (error) {
       // P2003 corresponds to a Foreign Key Constraint Failure.
       // This strict check prevents the deletion of subjects that are currently assigned to active tasks.
