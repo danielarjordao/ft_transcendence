@@ -1,5 +1,6 @@
 {
   "devDependencies": {
+    "@nestjs/config": "^4.0.4",
     "@types/multer": "^2.1.0"
   },
   "dependencies": {
