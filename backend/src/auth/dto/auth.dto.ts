@@ -25,6 +25,14 @@ export class SignInDto {
   password!: string;
 }
 
+export class TwoFactorSignInDto {
+  @IsString()
+  twoFactorToken!: string;
+
+  @IsString()
+  code!: string;
+}
+
 export class RefreshTokenDto {
   @IsOptional()
   @IsString()

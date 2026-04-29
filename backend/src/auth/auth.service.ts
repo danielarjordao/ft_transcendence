@@ -20,11 +20,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   SignUpDto,
   SignInDto,
+  TwoFactorSignInDto,
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/auth.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { decryptSecret } from '../common/utils/secret-crypto';
+import { verifyTwoFactorCode } from '../common/utils/two-factor';
 
 interface SessionContext {
   userAgent?: string;
@@ -75,6 +78,14 @@ export class AuthService {
 
   private getRefreshTokenExpiresIn(): string {
     return process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+  }
+
+  private getTwoFactorTokenSecret(): string {
+    return process.env.JWT_2FA_SECRET || 'default_2fa_secret';
+  }
+
+  private getTwoFactorTokenExpiresIn(): string {
+    return process.env.JWT_2FA_EXPIRES_IN || '5m';
   }
 
   private getPasswordResetExpiresMinutes(): number {
@@ -177,6 +188,42 @@ export class AuthService {
     ]);
 
     return { accessToken, refreshToken };
+  }
+
+  private async generateTwoFactorToken(userId: string): Promise<string> {
+    return this.jwtService.signAsync(
+      {
+        sub: userId,
+        purpose: '2fa',
+      },
+      {
+        secret: this.getTwoFactorTokenSecret(),
+        expiresIn: this.getTwoFactorTokenExpiresIn(),
+      },
+    );
+  }
+
+  private async verifyTwoFactorToken(twoFactorToken: string): Promise<string> {
+    try {
+      const payload = await this.jwtService.verifyAsync<JwtPayload>(
+        twoFactorToken,
+        {
+          secret: this.getTwoFactorTokenSecret(),
+        },
+      );
+
+      if (
+        !payload.sub ||
+        typeof payload.sub !== 'string' ||
+        payload.purpose !== '2fa'
+      ) {
+        throw new UnauthorizedException('Invalid two-factor token');
+      }
+
+      return payload.sub;
+    } catch {
+      throw new UnauthorizedException('Invalid two-factor token');
+    }
   }
 
   private async verifyRefreshToken(refreshToken: string): Promise<JwtPayload> {
@@ -508,8 +555,54 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // TODO: [Feature - 2FA] Check if the user has 2FA enabled.
-    // If yes, abort full token generation and return a partial response indicating an OTP code is required.
+    if (user.twoFactorEnabled) {
+      if (!user.twoFactorSecretEnc) {
+        throw new InternalServerErrorException(
+          'Two-factor authentication is not configured correctly',
+        );
+      }
+
+      return {
+        requiresTwoFactor: true,
+        twoFactorToken: await this.generateTwoFactorToken(user.id),
+      };
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email);
+    await Promise.all([
+      this.createSession(user.id, tokens.refreshToken, context),
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      }),
+    ]);
+
+    return {
+      ...tokens,
+      user: this.serializeUser(user),
+    };
+  }
+
+  async signInWithTwoFactor(
+    dto: TwoFactorSignInDto,
+    context?: SessionContext,
+  ) {
+    const userId = await this.verifyTwoFactorToken(dto.twoFactorToken);
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecretEnc) {
+      throw new UnauthorizedException('Invalid two-factor code');
+    }
+
+    const secret = decryptSecret(user.twoFactorSecretEnc);
+    const isCodeValid = await verifyTwoFactorCode(secret, dto.code);
+
+    if (!isCodeValid) {
+      throw new UnauthorizedException('Invalid two-factor code');
+    }
 
     const tokens = await this.generateTokens(user.id, user.email);
     await Promise.all([

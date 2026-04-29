@@ -16,6 +16,7 @@ import { AuthService } from './auth.service';
 import {
   SignUpDto,
   SignInDto,
+  TwoFactorSignInDto,
   RefreshTokenDto,
   ForgotPasswordDto,
   ResetPasswordDto,
@@ -81,6 +82,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   signIn(@Body() dto: SignInDto, @Req() req: Request) {
     return this.authService.signIn(dto, this.getSessionContext(req));
+  }
+
+  @Post('2fa/sign-in')
+  @HttpCode(HttpStatus.OK)
+  signInWithTwoFactor(@Body() dto: TwoFactorSignInDto, @Req() req: Request) {
+    return this.authService.signInWithTwoFactor(
+      dto,
+      this.getSessionContext(req),
+    );
   }
 
   @Post('refresh')
