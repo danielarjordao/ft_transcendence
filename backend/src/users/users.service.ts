@@ -3,6 +3,8 @@ import {
   NotFoundException,
   ConflictException,
   Logger,
+  InternalServerErrorException,
+  BadRequestException,
 } from '@nestjs/common';
 import 'multer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -199,33 +201,75 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // Fetch the current user's avatar URL to determine if we need to delete an old file from S3 before uploading the new one.
+    if (!file || !file.buffer) {
+      throw new BadRequestException('No file provided');
+    }
+
+    // Fetch the current avatar URL before making any changes to ensure we can clean up the old file if the upload and database update succeed.
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { avatarUrl: true },
     });
 
-    // If the user already has an avatar, attempt to delete the old file from S3 to prevent orphaned files and manage storage costs.
-    if (currentUser?.avatarUrl) {
-      try {
-        await this.s3Service.deleteFile(String(currentUser.avatarUrl));
-      } catch (error: unknown) {
-        // Log the error but don't fail the entire operation since the new avatar upload can still succeed.
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.logger.warn(
-          `Could not delete old avatar (${currentUser.avatarUrl}): ${errorMessage}`,
-        );
-      }
+    // Upload the new avatar to S3 first to ensure we have the new URL ready before updating the database.
+    let newAvatarUrl: string;
+    try {
+      newAvatarUrl = await this.s3Service.uploadFile(file, 'avatars');
+    } catch (error: unknown) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Upload S3 failed for user ${userId}: ${errMessage}`);
+      throw new InternalServerErrorException(
+        'Failed to upload the new avatar to storage.',
+      );
     }
 
-    // Upload the new avatar file to S3 and get the public URL, then update the user's avatarUrl in the database.
-    const avatarUrl = await this.s3Service.uploadFile(file, 'avatars');
+    // Update the user's avatar URL in the database. If this fails, we will attempt to roll back the S3 upload to prevent orphaned files.
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: newAvatarUrl },
+        select: { id: true, username: true, avatarUrl: true },
+      });
 
-    return await this.prisma.user.update({
-      where: { id: userId },
-      data: { avatarUrl },
-      select: { id: true, avatarUrl: true },
-    });
+      // Clean up the old avatar from S3 if it exists to prevent orphaned files and manage storage costs effectively.
+      if (currentUser?.avatarUrl) {
+        this.s3Service
+          .deleteFile(String(currentUser.avatarUrl))
+          .catch((deleteError: unknown) => {
+            const errMsg =
+              deleteError instanceof Error
+                ? deleteError.message
+                : String(deleteError);
+            this.logger.warn(
+              `Could not delete old avatar for user ${userId}: ${errMsg}`,
+            );
+          });
+      }
+
+      this.logger.log(`Avatar successfully updated for user ${userId}`);
+      return updatedUser;
+    } catch (error: unknown) {
+      // If the database update fails, we need to roll back the S3 upload to prevent orphaned files and manage storage costs effectively.
+      const errMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Database update failed for user ${userId}: ${errMessage}. Rolling back S3 upload.`,
+      );
+
+      try {
+        await this.s3Service.deleteFile(newAvatarUrl);
+      } catch (rollbackError: unknown) {
+        const rbMessage =
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError);
+        this.logger.error(
+          `CRITICAL: Rollback failed. Orphan file left in S3: ${newAvatarUrl}. Error: ${rbMessage}`,
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'Failed to update user profile with new avatar.',
+      );
+    }
   }
 }
