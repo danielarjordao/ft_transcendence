@@ -24,9 +24,10 @@ async function bootstrap() {
     }),
   );
 
-  // TODO: [Feature - Security] Lock down CORS for production.
-  // Replace the default open CORS policy with an explicit array of allowed frontend origins (e.g., origin: ['https://fazelo.com']).
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || true,
+    credentials: true,
+  });
 
   // Binds the server to all network interfaces ('0.0.0.0') to ensure compatibility with Docker and Cloud environments.
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');

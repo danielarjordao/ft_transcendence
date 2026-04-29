@@ -1,8 +1,17 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Request } from 'express';
 import { ActiveUserDto } from '../../common/guards/interfaces/active-user.interface';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { getCookieValue } from '../utils/cookies';
+
+const extractAccessTokenFromCookie = (
+  request: Request | undefined,
+): string | null => {
+  const token = getCookieValue(request?.headers.cookie, 'accessToken');
+  return token || null;
+};
 
 @Injectable()
 // Behind the scenes flow (Instantiation vs Execution):
@@ -16,7 +25,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // Verify that the strategy is configured to extract the token from the Authorization header,
     // and that it strictly checks expiration dates using the environment secret.
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        extractAccessTokenFromCookie,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: process.env.JWT_ACCESS_SECRET || 'default_dev_secret',
     });

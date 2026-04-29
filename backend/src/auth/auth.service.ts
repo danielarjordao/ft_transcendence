@@ -3,7 +3,8 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
-  NotImplementedException,
+  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -28,6 +29,28 @@ import { JwtPayload } from './interfaces/jwt-payload.interface';
 interface SessionContext {
   userAgent?: string;
   ipAddress?: string;
+}
+
+interface OAuth42TokenResponse {
+  access_token?: string;
+  token_type?: string;
+  refresh_token?: string;
+  scope?: string;
+  created_at?: number;
+  expires_in?: number;
+}
+
+interface OAuth42Profile {
+  id?: number;
+  email?: string;
+  login?: string;
+  displayname?: string;
+  usual_full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  image?: {
+    link?: string;
+  };
 }
 
 @Injectable()
@@ -64,6 +87,52 @@ export class AuthService {
       process.env.PASSWORD_RESET_FRONTEND_URL ||
       'http://localhost:5173/reset-password'
     );
+  }
+
+  private getOAuth42ClientId(): string {
+    const clientId = process.env.FORTY_TWO_CLIENT_ID;
+
+    if (!clientId) {
+      throw new InternalServerErrorException('42 OAuth client id is not configured');
+    }
+
+    return clientId;
+  }
+
+  private getOAuth42ClientSecret(): string {
+    const clientSecret = process.env.FORTY_TWO_CLIENT_SECRET;
+
+    if (!clientSecret) {
+      throw new InternalServerErrorException(
+        '42 OAuth client secret is not configured',
+      );
+    }
+
+    return clientSecret;
+  }
+
+  private getOAuth42CallbackUrl(): string {
+    return (
+      process.env.FORTY_TWO_CALLBACK_URL ||
+      'http://localhost:3000/api/auth/42/callback'
+    );
+  }
+
+  getFrontendAuthCallbackUrl(): string {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    return `${frontendUrl.replace(/\/$/, '')}/auth/callback`;
+  }
+
+  getOAuth42AuthorizationUrl(state: string): string {
+    const params = new URLSearchParams({
+      client_id: this.getOAuth42ClientId(),
+      redirect_uri: this.getOAuth42CallbackUrl(),
+      response_type: 'code',
+      scope: 'public',
+      state,
+    });
+
+    return `https://api.intra.42.fr/oauth/authorize?${params.toString()}`;
   }
 
   private serializeUser(user: User) {
@@ -167,6 +236,175 @@ export class AuthService {
     const separator = baseUrl.includes('?') ? '&' : '?';
 
     return `${baseUrl}${separator}token=${encodeURIComponent(token)}`;
+  }
+
+  private normalizeOAuth42ProfileName(profile: OAuth42Profile): string {
+    return (
+      profile.usual_full_name ||
+      profile.displayname ||
+      [profile.first_name, profile.last_name].filter(Boolean).join(' ') ||
+      profile.login ||
+      '42 User'
+    );
+  }
+
+  private normalizeOAuth42AvatarUrl(profile: OAuth42Profile): string | null {
+    return profile.image?.link || null;
+  }
+
+  private async createUniqueUsername(baseUsername: string): Promise<string> {
+    const sanitizedBase = baseUsername
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 24);
+
+    const fallbackBase = sanitizedBase || `user_${this.createRandomToken().slice(0, 8)}`;
+
+    let candidate = fallbackBase;
+    let suffix = 1;
+
+    while (await this.prisma.user.findUnique({ where: { username: candidate } })) {
+      candidate = `${fallbackBase}_${suffix}`.slice(0, 30);
+      suffix += 1;
+    }
+
+    return candidate;
+  }
+
+  private async exchangeOAuth42CodeForToken(
+    code: string,
+  ): Promise<OAuth42TokenResponse> {
+    const params = new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: this.getOAuth42ClientId(),
+      client_secret: this.getOAuth42ClientSecret(),
+      code,
+      redirect_uri: this.getOAuth42CallbackUrl(),
+    });
+
+    const response = await fetch('https://api.intra.42.fr/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      throw new UnauthorizedException('Invalid OAuth code');
+    }
+
+    const tokenResponse = (await response.json()) as OAuth42TokenResponse;
+
+    if (!tokenResponse.access_token) {
+      throw new UnauthorizedException('Invalid OAuth code');
+    }
+
+    return tokenResponse;
+  }
+
+  private async fetchOAuth42Profile(
+    accessToken: string,
+  ): Promise<OAuth42Profile> {
+    const response = await fetch('https://api.intra.42.fr/v2/me', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new UnauthorizedException('Unable to fetch 42 profile');
+    }
+
+    return (await response.json()) as OAuth42Profile;
+  }
+
+  private async resolveOAuth42User(profile: OAuth42Profile) {
+    const providerAccountId = String(profile.id || '');
+    const providerEmail = profile.email?.trim().toLowerCase();
+    const providerLogin = profile.login?.trim();
+
+    if (!providerAccountId || !providerLogin || !providerEmail) {
+      throw new BadRequestException('Invalid 42 profile payload');
+    }
+
+    const fullName = this.normalizeOAuth42ProfileName(profile);
+    const avatarUrl = this.normalizeOAuth42AvatarUrl(profile);
+
+    const existingAuthAccount = await this.prisma.authAccount.findUnique({
+      where: {
+        provider_providerAccountId: {
+          provider: AuthProvider.FORTY_TWO,
+          providerAccountId,
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    if (existingAuthAccount?.user) {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: existingAuthAccount.user.id },
+        data: {
+          fullName,
+          avatarUrl,
+          accountType: 'oauth_42',
+          lastLoginAt: new Date(),
+        },
+      });
+
+      await this.prisma.authAccount.update({
+        where: { id: existingAuthAccount.id },
+        data: {
+          providerEmail,
+          scope: 'public',
+        },
+      });
+
+      return updatedUser;
+    }
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: providerEmail },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email: providerEmail,
+          username: await this.createUniqueUsername(providerLogin),
+          fullName,
+          avatarUrl,
+          accountType: 'oauth_42',
+          lastLoginAt: new Date(),
+        },
+      });
+    } else {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          fullName: user.fullName || fullName,
+          avatarUrl: user.avatarUrl || avatarUrl,
+          accountType: 'oauth_42',
+          lastLoginAt: new Date(),
+        },
+      });
+    }
+
+    await this.prisma.authAccount.create({
+      data: {
+        userId: user.id,
+        provider: AuthProvider.FORTY_TWO,
+        providerAccountId,
+        providerEmail,
+        scope: 'public',
+      },
+    });
+
+    return user;
   }
 
   private async sendPasswordResetEmail(
@@ -514,13 +752,17 @@ export class AuthService {
     });
   }
 
-  oauth42Callback(_code: string) {
-    // TODO: [Feature - OAuth 42] Exchange the callback 'code' for an access token via the 42 API HTTP request.
-    // TODO: [Feature - OAuth 42] Fetch the user's profile data using the acquired 42 access token.
-    // TODO: [Feature - OAuth 42] Upsert the user in our database with accountType 'oauth_42'.
-    // TODO: [Feature - OAuth 42] Generate and return our internal JWT tokens for the session.
-    throw new NotImplementedException(
-      'OAuth42 Callback method not implemented yet.',
-    );
+  async oauth42Callback(code: string, context?: SessionContext) {
+    const oauthToken = await this.exchangeOAuth42CodeForToken(code);
+    const profile = await this.fetchOAuth42Profile(oauthToken.access_token as string);
+    const user = await this.resolveOAuth42User(profile);
+    const tokens = await this.generateTokens(user.id, user.email);
+
+    await this.createSession(user.id, tokens.refreshToken, context);
+
+    return {
+      ...tokens,
+      user: this.serializeUser(user),
+    };
   }
 }
