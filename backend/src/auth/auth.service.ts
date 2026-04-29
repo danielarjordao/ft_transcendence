@@ -8,13 +8,13 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHmac, randomBytes } from 'crypto';
-import * as nodemailer from 'nodemailer';
 import {
   SessionStatus,
   type Session,
   type User,
 } from '../generated/prisma/client';
 import { AuthProvider } from '../generated/prisma/enums';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   SignUpDto,
@@ -35,6 +35,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   private getAccessTokenSecret(): string {
@@ -167,45 +168,6 @@ export class AuthService {
     const separator = baseUrl.includes('?') ? '&' : '?';
 
     return `${baseUrl}${separator}token=${encodeURIComponent(token)}`;
-  }
-
-  private async sendPasswordResetEmail(
-    email: string,
-    resetLink: string,
-  ): Promise<void> {
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = Number(process.env.SMTP_PORT || '587');
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPassword = process.env.SMTP_PASSWORD;
-    const smtpFrom = process.env.SMTP_FROM || 'no-reply@fazelo.local';
-
-    if (!smtpHost) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[auth] Password reset link for ${email}: ${resetLink}`);
-      }
-
-      return;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth:
-        smtpUser && smtpPassword
-          ? {
-              user: smtpUser,
-              pass: smtpPassword,
-            }
-          : undefined,
-    });
-
-    await transporter.sendMail({
-      from: smtpFrom,
-      to: email,
-      subject: 'Reset your password',
-      text: `Use this link to reset your password: ${resetLink}`,
-    });
   }
 
   private async createSession(
@@ -442,7 +404,7 @@ export class AuthService {
       });
     });
 
-    await this.sendPasswordResetEmail(user.email, resetLink);
+    await this.mailService.sendPasswordResetEmail(user.email, resetLink);
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
