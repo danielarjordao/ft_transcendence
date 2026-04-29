@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import 'multer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,8 @@ import { S3Service } from '../storage/s3.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly appGateway: AppGateway,
@@ -196,20 +199,33 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // Upload the file to AWS S3 and get the public URL
-    const avatarUrl = await this.s3Service.uploadFile(file, 'avatars');
-
-    // Update the user's avatar URL in the database
-    const updatedUser = await this.prisma.user.update({
+    // Fetch the current user's avatar URL to determine if we need to delete an old file from S3 before uploading the new one.
+    const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      data: { avatarUrl },
-      select: {
-        id: true,
-        username: true,
-        avatarUrl: true,
-      },
+      select: { avatarUrl: true },
     });
 
-    return updatedUser;
+    // If the user already has an avatar, attempt to delete the old file from S3 to prevent orphaned files and manage storage costs.
+    if (currentUser?.avatarUrl) {
+      try {
+        await this.s3Service.deleteFile(String(currentUser.avatarUrl));
+      } catch (error: unknown) {
+        // Log the error but don't fail the entire operation since the new avatar upload can still succeed.
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Could not delete old avatar (${currentUser.avatarUrl}): ${errorMessage}`,
+        );
+      }
+    }
+
+    // Upload the new avatar file to S3 and get the public URL, then update the user's avatarUrl in the database.
+    const avatarUrl = await this.s3Service.uploadFile(file, 'avatars');
+
+    return await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl },
+      select: { id: true, avatarUrl: true },
+    });
   }
 }
