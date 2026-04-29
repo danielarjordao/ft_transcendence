@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TasksService } from './tasks.service';
 import { AppGateway } from 'src/realtime/app.gateway';
+import { S3Service } from '../storage/s3.service';
 
 @Injectable()
 export class AttachmentsService {
@@ -9,6 +10,7 @@ export class AttachmentsService {
     private readonly prisma: PrismaService,
     private readonly tasksService: TasksService,
     private readonly appGateway: AppGateway,
+    private readonly s3Service: S3Service,
   ) {}
 
   async listByTask(userId: string, taskId: string) {
@@ -20,16 +22,20 @@ export class AttachmentsService {
   async upload(userId: string, taskId: string, files: Express.Multer.File[]) {
     const task = await this.tasksService.findOne(userId, taskId);
 
-    // TODO: [Feature - S3 Storage] Implement actual upload logic to an AWS S3 Bucket.
-    // Replace this mock mapping with the actual S3 object keys returned by the AWS SDK.
-    const data = files.map((file) => ({
-      taskId,
-      uploaderId: userId,
-      fileName: file.originalname,
-      fileSize: file.size,
-      mimeType: file.mimetype,
-      storageKey: `mock-s3-key-${Date.now()}-${file.originalname}`,
-    }));
+    const data = await Promise.all(
+      files.map(async (file) => {
+        const fileUrl = await this.s3Service.uploadFile(file, 'tasks');
+
+        return {
+          taskId,
+          uploaderId: userId,
+          fileName: file.originalname,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+          storageKey: fileUrl,
+        };
+      }),
+    );
 
     await this.prisma.attachment.createMany({ data });
 
@@ -66,11 +72,12 @@ export class AttachmentsService {
 
   async remove(userId: string, attachmentId: string) {
     const attachment = await this.getById(userId, attachmentId);
-
     const task = await this.tasksService.findOne(userId, attachment.taskId);
 
-    // TODO: [Feature - S3 Storage] Delete the actual physical file from the S3 Bucket using the storageKey.
+    // Remove the file from AWS S3 first to ensure we don't leave orphaned files if the database deletion fails.
+    await this.s3Service.deleteFile(attachment.storageKey);
 
+    // Delete the attachment record from the database.
     await this.prisma.attachment.delete({ where: { id: attachment.id } });
 
     this.appGateway.server
