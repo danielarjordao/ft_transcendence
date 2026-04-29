@@ -2,7 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import 'multer';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,12 +10,14 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Prisma } from '../generated/prisma/client';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
 import { AppGateway } from '../realtime/app.gateway';
+import { S3Service } from '../storage/s3.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly appGateway: AppGateway,
+    private readonly s3Service: S3Service,
   ) {}
 
   // Helper method: Centralized notification logic to inform friends of user status changes, profile updates, etc.
@@ -195,28 +196,18 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // Fail-Fast: Verify the file actually exists in the payload.
-    if (!file) {
-      throw new BadRequestException('No file provided');
-    }
+    // Upload the file to AWS S3 and get the public URL
+    const avatarUrl = await this.s3Service.uploadFile(file, 'avatars');
 
-    // TODO: [Feature - Security] Implement strict validation for file type (MIME check) and size constraints using a custom Pipe.
-    // TODO: [Feature - S3 Storage] Upload the physical file to AWS S3 and retrieve the real storage key.
-    // TODO: [Feature - S3 Storage] Construct the newAvatarUrl using the stable S3 URL or a signed endpoint.
-
-    const fileExtension = file.originalname.split('.').pop() || 'png';
-    const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.${fileExtension}`;
-
+    // Update the user's avatar URL in the database
     const updatedUser = await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl: newAvatarUrl },
-      select: { avatarUrl: true },
-    });
-
-    // Real-Time Update: Notify all friends about the avatar change so they can see the new avatar immediately in their friend lists or chats.
-    await this.notifyFriends(userId, 'avatar_updated', {
-      userId,
-      newAvatarUrl: updatedUser.avatarUrl,
+      data: { avatarUrl },
+      select: {
+        id: true,
+        username: true,
+        avatarUrl: true,
+      },
     });
 
     return updatedUser;
