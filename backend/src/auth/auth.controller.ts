@@ -4,12 +4,14 @@ import {
   Post,
   Body,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   Query,
-  Redirect,
+  UnauthorizedException,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { randomUUID } from 'crypto';
+import type { CookieOptions, Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import {
   SignUpDto,
@@ -18,6 +20,11 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/auth.dto';
+import { getCookieValue } from './utils/cookies';
+
+const ACCESS_TOKEN_COOKIE = 'accessToken';
+const REFRESH_TOKEN_COOKIE = 'refreshToken';
+const OAUTH42_STATE_COOKIE = 'oauth42_state';
 
 @Controller('auth')
 export class AuthController {
@@ -30,6 +37,38 @@ export class AuthController {
       userAgent: Array.isArray(userAgent) ? userAgent[0] : userAgent,
       ipAddress: req.ip,
     };
+  }
+
+  private getCookieOptions(maxAge?: number): CookieOptions {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      ...(maxAge !== undefined ? { maxAge } : {}),
+    };
+  }
+
+  private setAuthCookies(
+    res: Response,
+    accessToken: string,
+    refreshToken: string,
+  ): void {
+    res.cookie(ACCESS_TOKEN_COOKIE, accessToken, this.getCookieOptions(15 * 60 * 1000));
+    res.cookie(
+      REFRESH_TOKEN_COOKIE,
+      refreshToken,
+      this.getCookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
+  }
+
+  private clearAuthCookies(res: Response): void {
+    res.clearCookie(ACCESS_TOKEN_COOKIE, this.getCookieOptions());
+    res.clearCookie(REFRESH_TOKEN_COOKIE, this.getCookieOptions());
+  }
+
+  private resolveRefreshToken(req: Request, dto?: RefreshTokenDto): string | undefined {
+    return dto?.refreshToken || getCookieValue(req.headers.cookie, REFRESH_TOKEN_COOKIE);
   }
 
   @Post('sign-up')
@@ -46,15 +85,44 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto);
+  async refresh(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = this.resolveRefreshToken(req, dto);
+
+    if (!refreshToken) {
+      this.clearAuthCookies(res);
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    const tokens = await this.authService.refresh({ refreshToken });
+
+    if (getCookieValue(req.headers.cookie, REFRESH_TOKEN_COOKIE)) {
+      this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    }
+
+    return tokens;
   }
 
   @Post('logout')
   // Verify that 204 No Content is used here to indicate the successful teardown of the session.
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto);
+  async logout(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = this.resolveRefreshToken(req, dto);
+
+    this.clearAuthCookies(res);
+
+    if (!refreshToken) {
+      return;
+    }
+
+    return this.authService.logout({ refreshToken });
   }
 
   @Post('forgot-password')
@@ -71,15 +139,40 @@ export class AuthController {
   }
 
   @Get('42')
-  // Check that this route correctly proxies the user to the 42 OAuth consent screen.
-  @Redirect(
-    'https://api.intra.42.fr/oauth/authorize?client_id=mock&redirect_uri=mock&response_type=code',
-    302,
-  )
-  oauth42Redirect() {}
+  oauth42Redirect(@Res() res: Response) {
+    const state = randomUUID();
+
+    res.cookie(
+      OAUTH42_STATE_COOKIE,
+      state,
+      this.getCookieOptions(10 * 60 * 1000),
+    );
+
+    return res.redirect(this.authService.getOAuth42AuthorizationUrl(state));
+  }
 
   @Get('42/callback')
-  oauth42Callback(@Query('code') code: string) {
-    return this.authService.oauth42Callback(code);
+  async oauth42Callback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const stateFromCookie = getCookieValue(req.headers.cookie, OAUTH42_STATE_COOKIE);
+
+    res.clearCookie(OAUTH42_STATE_COOKIE, this.getCookieOptions());
+
+    if (!code || !state || !stateFromCookie || stateFromCookie !== state) {
+      return res.redirect(`${this.authService.getFrontendAuthCallbackUrl()}?error=oauth_state`);
+    }
+
+    const result = await this.authService.oauth42Callback(
+      code,
+      this.getSessionContext(req),
+    );
+
+    this.setAuthCookies(res, result.accessToken, result.refreshToken);
+
+    return res.redirect(this.authService.getFrontendAuthCallbackUrl());
   }
 }
