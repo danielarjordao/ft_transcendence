@@ -68,10 +68,7 @@ export class S3Service {
     }
   }
 
-  /**
-   * Deletes a file from AWS S3 using its full URL.
-   * @param fileUrl The public URL of the file stored in the database
-   */
+  // Deletes a file from AWS S3 given its public URL
   async deleteFile(fileUrl: string): Promise<void> {
     try {
       const url = new URL(fileUrl);
