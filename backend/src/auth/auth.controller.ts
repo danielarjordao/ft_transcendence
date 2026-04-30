@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { CookieOptions, Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import {
   SignUpDto,
@@ -80,12 +81,14 @@ export class AuthController {
   @Post('sign-in')
   // Verify that sign-in returns 200 OK, as it authorizes an existing resource rather than creating a new entity.
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   signIn(@Body() dto: SignInDto, @Req() req: Request) {
     return this.authService.signIn(dto, this.getSessionContext(req));
   }
 
   @Post('2fa/sign-in')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   signInWithTwoFactor(@Body() dto: TwoFactorSignInDto, @Req() req: Request) {
     return this.authService.signInWithTwoFactor(
       dto,
@@ -95,6 +98,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   async refresh(
     @Body() dto: RefreshTokenDto,
     @Req() req: Request,
@@ -138,12 +142,14 @@ export class AuthController {
   @Post('forgot-password')
   // Verify that 202 Accepted is used to indicate an asynchronous background process (email dispatch).
   @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

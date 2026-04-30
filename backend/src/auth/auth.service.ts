@@ -9,6 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHmac, randomBytes } from 'crypto';
+import type { StringValue } from 'ms';
 import {
   SessionStatus,
   type Session,
@@ -72,20 +73,20 @@ export class AuthService {
     return process.env.JWT_REFRESH_SECRET || 'default_refresh_secret';
   }
 
-  private getAccessTokenExpiresIn(): string {
-    return process.env.JWT_ACCESS_EXPIRES_IN || '15min';
+  private getAccessTokenExpiresIn(): StringValue {
+    return (process.env.JWT_ACCESS_EXPIRES_IN || '15m') as StringValue;
   }
 
-  private getRefreshTokenExpiresIn(): string {
-    return process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+  private getRefreshTokenExpiresIn(): StringValue {
+    return (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as StringValue;
   }
 
   private getTwoFactorTokenSecret(): string {
     return process.env.JWT_2FA_SECRET || 'default_2fa_secret';
   }
 
-  private getTwoFactorTokenExpiresIn(): string {
-    return process.env.JWT_2FA_EXPIRES_IN || '5m';
+  private getTwoFactorTokenExpiresIn(): StringValue {
+    return (process.env.JWT_2FA_EXPIRES_IN || '5m') as StringValue;
   }
 
   private getPasswordResetExpiresMinutes(): number {
@@ -620,6 +621,10 @@ export class AuthService {
   }
 
   async refresh(dto: RefreshTokenDto) {
+    if (!dto.refreshToken) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
     const payload = await this.verifyRefreshToken(dto.refreshToken);
     const refreshTokenHash = this.hashToken(dto.refreshToken);
 
@@ -671,6 +676,10 @@ export class AuthService {
   }
 
   async logout(dto: RefreshTokenDto): Promise<void> {
+    if (!dto.refreshToken) {
+      return;
+    }
+
     const refreshTokenHash = this.hashToken(dto.refreshToken);
     const session = await this.prisma.session.findUnique({
       where: { refreshTokenHash },

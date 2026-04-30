@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,6 +19,14 @@ import { ChatModule } from './chat/chat.module';
   imports: [
     // TODO: [Feature - DevOps] Import and configure '@nestjs/config' (ConfigModule.forRoot) to centralize and validate environment variables (.env).
     // TODO: [Feature - WebSockets] Add RealtimeModule (or EventsModule) here once the Socket.io gateway is implemented.
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000,
+          limit: 60,
+        },
+      ],
+    }),
     PrismaModule,
     SubjectsModule,
     FieldsModule,
@@ -30,6 +40,12 @@ import { ChatModule } from './chat/chat.module';
     ChatModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
