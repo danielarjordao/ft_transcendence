@@ -11,9 +11,7 @@ function resolveEncryptionKey(): Buffer {
   const configuredKey = process.env.AUTH_ENCRYPTION_KEY;
 
   if (!configuredKey) {
-    return createHash('sha256')
-      .update('default_dev_auth_encryption_key')
-      .digest();
+    throw new Error('AUTH_ENCRYPTION_KEY is not configured');
   }
 
   const decodedKey = Buffer.from(configuredKey, 'base64');

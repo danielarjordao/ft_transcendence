@@ -65,12 +65,24 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
+  private getRequiredEnv(name: string, description?: string): string {
+    const value = process.env[name];
+
+    if (!value) {
+      throw new InternalServerErrorException(
+        `${description || name} is not configured`,
+      );
+    }
+
+    return value;
+  }
+
   private getAccessTokenSecret(): string {
-    return process.env.JWT_ACCESS_SECRET || 'default_dev_secret';
+    return this.getRequiredEnv('JWT_ACCESS_SECRET', 'JWT access secret');
   }
 
   private getRefreshTokenSecret(): string {
-    return process.env.JWT_REFRESH_SECRET || 'default_refresh_secret';
+    return this.getRequiredEnv('JWT_REFRESH_SECRET', 'JWT refresh secret');
   }
 
   private getAccessTokenExpiresIn(): StringValue {
@@ -82,7 +94,7 @@ export class AuthService {
   }
 
   private getTwoFactorTokenSecret(): string {
-    return process.env.JWT_2FA_SECRET || 'default_2fa_secret';
+    return this.getRequiredEnv('JWT_2FA_SECRET', 'JWT 2FA secret');
   }
 
   private getTwoFactorTokenExpiresIn(): StringValue {
@@ -247,7 +259,12 @@ export class AuthService {
   }
 
   private hashToken(token: string): string {
-    return createHmac('sha256', process.env.AUTH_TOKEN_PEPPER || 'dev_pepper')
+    const pepper = this.getRequiredEnv(
+      'AUTH_TOKEN_PEPPER',
+      'Auth token pepper',
+    );
+
+    return createHmac('sha256', pepper)
       .update(token)
       .digest('hex');
   }

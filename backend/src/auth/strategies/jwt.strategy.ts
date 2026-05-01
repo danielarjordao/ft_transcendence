@@ -13,6 +13,16 @@ const extractAccessTokenFromCookie = (
   return token || null;
 };
 
+function resolveAccessTokenSecret(): string {
+  const secret = process.env.JWT_ACCESS_SECRET;
+
+  if (!secret) {
+    throw new Error('JWT_ACCESS_SECRET is not configured');
+  }
+
+  return secret;
+}
+
 @Injectable()
 // Behind the scenes flow (Instantiation vs Execution):
 // - Instantiation: This class is created as a Singleton exactly once when the NestJS server starts. 
@@ -30,7 +40,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_ACCESS_SECRET || 'default_dev_secret',
+      secretOrKey: resolveAccessTokenSecret(),
     });
   }
 
