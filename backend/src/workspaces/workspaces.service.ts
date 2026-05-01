@@ -10,10 +10,14 @@ import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { ListWorkspacesQueryDto } from './dto/list-workspaces.dto';
 import { UpdateMemberRoleDto } from './dto/workspace-member.dto';
 import { Prisma, WorkspaceMemberRole } from '../generated/prisma/client';
+import { AppGateway } from 'src/realtime/app.gateway';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+  ) {}
 
   private async checkAdminRights(userId: string, workspaceId: string) {
     const membership = await this.prisma.workspaceMember.findUnique({
@@ -107,7 +111,7 @@ export class WorkspacesService {
     const workspace = await this.prisma.workspace.findFirst({
       where: {
         id: wsId,
-        members: { some: { userId: userId } }, // <-- SECURITY GATEKEEPER RESTORED
+        members: { some: { userId: userId } },
       },
       include: {
         members: {
@@ -154,7 +158,10 @@ export class WorkspacesService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'workspace_updated' to 'workspace:{wsId}'.
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('workspace_updated', updatedWorkspace);
+
     return updatedWorkspace;
   }
 
@@ -167,7 +174,9 @@ export class WorkspacesService {
 
     await this.prisma.workspace.delete({ where: { id: wsId } });
 
-    // TODO: [Feature - WebSockets] Emit 'workspace_deleted' to forcefully close the workspace UI for all active members.
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('workspace_deleted', { id: wsId });
   }
 
   async listMembers(userId: string, wsId: string) {
@@ -236,15 +245,19 @@ export class WorkspacesService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'member_role_updated' to 'workspace:{wsId}'.
-
-    return {
+    const formattedMember = {
       userId: updatedMember.userId,
       username: updatedMember.user.username,
       fullName: updatedMember.user.fullName,
       role: updatedMember.role.toLowerCase(),
       status: updatedMember.user.isOnline ? 'online' : 'offline',
     };
+
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('member_role_updated', formattedMember);
+
+    return formattedMember;
   }
 
   async removeMember(userId: string, wsId: string, memberId: string) {
@@ -283,6 +296,8 @@ export class WorkspacesService {
       });
     });
 
-    // TODO: [Feature - WebSockets] Emit 'member_removed' to 'workspace:{wsId}'.
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('member_removed', { memberId });
   }
 }

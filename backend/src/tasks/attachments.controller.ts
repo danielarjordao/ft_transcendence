@@ -12,6 +12,9 @@ import {
   UseInterceptors,
   UseGuards,
   UnauthorizedException,
+  ParseFilePipe,
+  MaxFileSizeValidator,
+  FileTypeValidator,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
@@ -34,19 +37,30 @@ export class AttachmentsController {
   listByTask(
     @Req() req: RequestWithUser,
     @Param('taskId') taskId: string,
-    @Query() _query: ListAttachmentsQueryDto, // Prefixed with _ to indicate intentional non-use for now.
+    @Query() _query: ListAttachmentsQueryDto,
   ) {
     const userId = this.getUserId(req);
     return this.attachmentsService.listByTask(userId, taskId);
   }
 
   @Post('tasks/:taskId/attachments')
-  // Intercepts multipart/form-data requests to extract multiple file uploads natively.
   @UseInterceptors(FilesInterceptor('files'))
   upload(
     @Req() req: RequestWithUser,
     @Param('taskId') taskId: string,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles(
+      new ParseFilePipe({
+        validators: [
+          // Limit file size to 10MB to prevent abuse and ensure performance
+          new MaxFileSizeValidator({ maxSize: 10485760 }),
+          // Restrict allowed file types to common document and image formats for security and relevance
+          new FileTypeValidator({
+            fileType: /(jpg|jpeg|png|gif|pdf|txt|csv|zip)$/i,
+          }),
+        ],
+      }),
+    )
+    files: Express.Multer.File[],
   ) {
     const userId = this.getUserId(req);
     return this.attachmentsService.upload(userId, taskId, files);

@@ -98,8 +98,6 @@ export class ChatService {
       data: { readAt: new Date() },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'notification_updated' or 'read_receipt' to 'user:{friendId}'.
-
     // Fetch as a raw array to match API.md (Section 6.2) while respecting limit/offset.
     const messages = await this.prisma.message.findMany({
       where: {
@@ -123,6 +121,10 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, dto: SendMessageDto) {
+    if (!dto || !dto.toUserId) {
+      throw new NotFoundException('Target user ID is required');
+    }
+
     // Fail-Fast: Ensure the target user actually exists before attempting to write message data.
     const receiver = await this.prisma.user.findUnique({
       where: { id: dto.toUserId },
@@ -140,8 +142,6 @@ export class ChatService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'receive_message' event to the 'user:{dto.toUserId}' room.
-
     return {
       id: newMsg.id,
       senderId: newMsg.senderId,
@@ -149,5 +149,30 @@ export class ChatService {
       createdAt: newMsg.createdAt,
       readAt: newMsg.readAt,
     };
+  }
+
+  // New method to mark messages as read, which can be called from the controller or gateway when appropriate.
+  async markMessagesAsRead(userId: string, fromUserId: string) {
+    // Update all messages from 'fromUserId' to 'userId' that are currently unread, setting their readAt timestamp.
+    const result = await this.prisma.message.updateMany({
+      where: {
+        senderId: fromUserId,
+        receiverId: userId,
+        readAt: null,
+      },
+      data: {
+        readAt: new Date(),
+      },
+    });
+
+    // If no messages were updated, we can return null or an appropriate response
+    // to indicate that there were no unread messages to mark as read.
+    if (result.count === 0) {
+      return null;
+    }
+
+    // Return the timestamp of when the messages were marked as read,
+    // which can be used for client-side updates.
+    return new Date();
   }
 }

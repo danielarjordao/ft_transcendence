@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
 import { ChatService } from './chat.service';
+import { AppGateway } from '../realtime/app.gateway';
 import { SendMessageDto, ChatQueryDto } from './dto/chat.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
@@ -18,7 +19,10 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly AppGateway: AppGateway,
+  ) {}
 
   // Check that authentication extraction is centralized to enforce Fail-Fast validation.
   private getUserId(request: RequestWithUser): string {
@@ -53,8 +57,13 @@ export class ChatController {
   }
 
   @Post('messages')
-  sendMessage(@Req() req: RequestWithUser, @Body() dto: SendMessageDto) {
+  async sendMessage(@Req() req: RequestWithUser, @Body() dto: SendMessageDto) {
     const userId = this.getUserId(req);
-    return this.chatService.sendMessage(userId, dto);
+    const savedMessage = await this.chatService.sendMessage(userId, dto);
+    const receiverRoom = `user:${dto.toUserId}`;
+    this.AppGateway.server
+      .to(receiverRoom)
+      .emit('receive_message', savedMessage);
+    return savedMessage;
   }
 }

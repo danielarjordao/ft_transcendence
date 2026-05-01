@@ -10,10 +10,17 @@ import {
   CreateFriendRequestDto,
   RespondFriendRequestDto,
 } from './dto/friend-request.dto';
+import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class FriendsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private sortIds(
     id1: string,
@@ -70,7 +77,9 @@ export class FriendsService {
       where: { userAId, userBId },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'friend_removed' event to 'user:{friendId}'.
+    this.appGateway.server
+      .to(`user:${friendId}`)
+      .emit('friend_removed', { userId });
   }
 
   async listRequests(userId: string) {
@@ -114,13 +123,25 @@ export class FriendsService {
         'A friend request already exists between you two',
       );
 
-    // TODO: [Feature - WebSockets] Emit 'friend_request_received' event to 'user:{dto.targetUserId}'.
-    return await this.prisma.friendRequest.create({
+    const newRequest = await this.prisma.friendRequest.create({
       data: {
         senderId: userId,
         receiverId: dto.targetUserId,
       },
     });
+
+    this.appGateway.server
+      .to(`user:${dto.targetUserId}`)
+      .emit('friend_request_received', newRequest);
+
+    await this.notificationsService.create(dto.targetUserId, {
+      type: NotificationType.FRIEND_REQUEST,
+      title: 'New Friend Request',
+      message: 'You have received a new friend request.',
+      resource: { requestId: newRequest.id, senderId: userId },
+    });
+
+    return newRequest;
   }
 
   async respondRequest(
@@ -143,6 +164,25 @@ export class FriendsService {
 
     if (dto.action === 'reject') {
       await this.prisma.friendRequest.delete({ where: { id: requestId } });
+
+      // Alert the sender that their request was rejected
+      this.appGateway.server
+        .to(`user:${request.senderId}`)
+        .emit('friend_request_updated', {
+          id: request.id,
+          senderId: request.senderId,
+          receiverId: request.receiverId,
+          status: 'rejected',
+          createdAt: request.createdAt.toISOString(),
+        });
+
+      await this.notificationsService.create(request.senderId, {
+        type: NotificationType.FRIEND_REQUEST,
+        title: 'Friend Request Declined',
+        message: 'Your friend request was declined.',
+        resource: { requestId: request.id },
+      });
+
       return { status: 'rejected' };
     }
 
@@ -170,14 +210,44 @@ export class FriendsService {
       throw new NotFoundException('Friendship could not be established');
     }
 
-    // TODO: [Feature - WebSockets] Emit 'friend_request_updated' to the original sender.
-
-    // Contract Alignment: Return the strict Friendship object representation,
-    // avoiding undocumented custom shapes.
-    return {
+    const friendshipResponse = {
       userAId: friendship.userAId,
       userBId: friendship.userBId,
       createdAt: friendship.createdAt.toISOString(),
     };
+
+    // Alert the sender that their request was accepted and provide the new friendship details
+    this.appGateway.server
+      .to(`user:${request.senderId}`)
+      .emit('friend_request_updated', {
+        id: request.id,
+        senderId: request.senderId,
+        receiverId: request.receiverId,
+        status: 'accepted',
+        createdAt: request.createdAt.toISOString(),
+      });
+
+    await this.notificationsService.create(request.senderId, {
+      type: NotificationType.FRIEND_REQUEST,
+      title: 'Friend Request Accepted',
+      message: 'Your friend request was accepted.',
+      resource: { requestId: request.id, newFriendId: userId },
+    });
+
+    return friendshipResponse;
+  }
+
+  // Real-time Presence Updates: Notify friends when a user goes online or offline.
+  async notifyPresenceChange(userId: string, status: 'online' | 'offline') {
+    const friendships = await this.prisma.friendship.findMany({
+      where: { OR: [{ userAId: userId }, { userBId: userId }] },
+    });
+
+    for (const f of friendships) {
+      const friendId = f.userAId === userId ? f.userBId : f.userAId;
+      this.appGateway.server
+        .to(`user:${friendId}`)
+        .emit('friend_presence_changed', { userId, status });
+    }
   }
 }

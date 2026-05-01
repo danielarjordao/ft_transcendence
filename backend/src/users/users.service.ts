@@ -2,6 +2,8 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  Logger,
+  InternalServerErrorException,
   BadRequestException,
 } from '@nestjs/common';
 import 'multer';
@@ -10,10 +12,39 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { Prisma } from '../generated/prisma/client';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
+import { AppGateway } from '../realtime/app.gateway';
+import { S3Service } from '../storage/s3.service';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+    private readonly s3Service: S3Service,
+  ) {}
+
+  // Helper method: Centralized notification logic to inform friends of user status changes, profile updates, etc.
+  private async notifyFriends(userId: string, eventName: string, payload: any) {
+    const friendships = await this.prisma.friendship.findMany({
+      where: {
+        OR: [{ userAId: userId }, { userBId: userId }],
+      },
+    });
+
+    const friendIds = friendships.map((f) =>
+      f.userAId === userId ? f.userBId : f.userAId,
+    );
+
+    // Notify all friends about the event (e.g., 'profile_updated', 'status_changed') with the relevant payload.
+    friendIds.forEach((friendId) => {
+      this.appGateway.server.to(`user:${friendId}`).emit(eventName, payload);
+    });
+
+    // Also notify the user themselves if needed (e.g., for confirmation of their own action).
+    this.appGateway.server.to(`user:${userId}`).emit(eventName, payload);
+  }
 
   async getMe(userId: string) {
     // Explicit selection ensures no sensitive authentication data is exposed to the client,
@@ -68,7 +99,15 @@ export class UsersService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'profile_updated' event to all connected clients to synchronize UI elements instantly.
+    // Real-Time Update: Notify all friends about the profile update so they can see the changes immediately in their friend lists or chats.
+    await this.notifyFriends(userId, 'profile_updated', {
+      userId,
+      updates: {
+        username: updatedUser.username,
+        fullName: updatedUser.fullName,
+        bio: updatedUser.bio,
+      },
+    });
 
     return updatedUser;
   }
@@ -162,26 +201,75 @@ export class UsersService {
   }
 
   async uploadAvatar(userId: string, file: Express.Multer.File) {
-    // Fail-Fast: Verify the file actually exists in the payload.
-    if (!file) {
+    if (!file || !file.buffer) {
       throw new BadRequestException('No file provided');
     }
 
-    // TODO: [Feature - Security] Implement strict validation for file type (MIME check) and size constraints using a custom Pipe.
-    // TODO: [Feature - S3 Storage] Upload the physical file to AWS S3 and retrieve the real storage key.
-    // TODO: [Feature - S3 Storage] Construct the newAvatarUrl using the stable S3 URL or a signed endpoint.
-
-    const fileExtension = file.originalname.split('.').pop() || 'png';
-    const newAvatarUrl = `https://cdn.fazelo.com/avatars/${userId}_${Date.now()}.${fileExtension}`;
-
-    const updatedUser = await this.prisma.user.update({
+    // Fetch the current avatar URL before making any changes to ensure we can clean up the old file if the upload and database update succeed.
+    const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      data: { avatarUrl: newAvatarUrl },
       select: { avatarUrl: true },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'avatar_updated' event so connected friends see the visual change immediately.
+    // Upload the new avatar to S3 first to ensure we have the new URL ready before updating the database.
+    let newAvatarUrl: string;
+    try {
+      newAvatarUrl = await this.s3Service.uploadFile(file, 'avatars');
+    } catch (error: unknown) {
+      const errMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Upload S3 failed for user ${userId}: ${errMessage}`);
+      throw new InternalServerErrorException(
+        'Failed to upload the new avatar to storage.',
+      );
+    }
 
-    return updatedUser;
+    // Update the user's avatar URL in the database. If this fails, we will attempt to roll back the S3 upload to prevent orphaned files.
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: { avatarUrl: newAvatarUrl },
+        select: { id: true, username: true, avatarUrl: true },
+      });
+
+      // Clean up the old avatar from S3 if it exists to prevent orphaned files and manage storage costs effectively.
+      if (currentUser?.avatarUrl) {
+        this.s3Service
+          .deleteFile(String(currentUser.avatarUrl))
+          .catch((deleteError: unknown) => {
+            const errMsg =
+              deleteError instanceof Error
+                ? deleteError.message
+                : String(deleteError);
+            this.logger.warn(
+              `Could not delete old avatar for user ${userId}: ${errMsg}`,
+            );
+          });
+      }
+
+      this.logger.log(`Avatar successfully updated for user ${userId}`);
+      return updatedUser;
+    } catch (error: unknown) {
+      // If the database update fails, we need to roll back the S3 upload to prevent orphaned files and manage storage costs effectively.
+      const errMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Database update failed for user ${userId}: ${errMessage}. Rolling back S3 upload.`,
+      );
+
+      try {
+        await this.s3Service.deleteFile(newAvatarUrl);
+      } catch (rollbackError: unknown) {
+        const rbMessage =
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError);
+        this.logger.error(
+          `CRITICAL: Rollback failed. Orphan file left in S3: ${newAvatarUrl}. Error: ${rbMessage}`,
+        );
+      }
+
+      throw new InternalServerErrorException(
+        'Failed to update user profile with new avatar.',
+      );
+    }
   }
 }

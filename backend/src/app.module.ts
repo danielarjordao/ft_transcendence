@@ -14,11 +14,12 @@ import { SubjectsModule } from './subjects/subjects.module';
 import { FieldsModule } from './fields/fields.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { ConfigModule } from '@nestjs/config';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
-    // TODO: [Feature - DevOps] Import and configure '@nestjs/config' (ConfigModule.forRoot) to centralize and validate environment variables (.env).
-    // TODO: [Feature - WebSockets] Add RealtimeModule (or EventsModule) here once the Socket.io gateway is implemented.
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -27,6 +28,12 @@ import { ChatModule } from './chat/chat.module';
         },
       ],
     }),
+    ConfigModule.forRoot({
+      // Load environment variables from the .env file and make them globally available across the application
+      isGlobal: true,
+    }),
+    StorageModule,
+    RealtimeModule,
     PrismaModule,
     SubjectsModule,
     FieldsModule,

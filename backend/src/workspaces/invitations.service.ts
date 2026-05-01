@@ -10,10 +10,17 @@ import {
   WorkspaceInvitationStatus,
   WorkspaceMemberRole,
 } from '../generated/prisma/client';
+import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class InvitationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async create(
     inviterId: string,
@@ -70,10 +77,8 @@ export class InvitationsService {
     });
 
     // TODO: [Feature - Emails] Dispatch an email via Nodemailer/SendGrid to 'dto.email' containing a secure join link.
-    // TODO: [Feature - WebSockets] If 'inviteeUser' exists, emit 'invitation_received' to 'user:{inviteeUser.id}'.
 
-    // Architectural Focus: Normalizing the response to match Section 3.7 of API.md
-    return {
+    const formattedInvitation = {
       id: result.id,
       workspaceId: result.workspaceId,
       inviterId: result.inviterId,
@@ -82,6 +87,22 @@ export class InvitationsService {
       status: result.status.toLowerCase(),
       createdAt: result.createdAt.toISOString(),
     };
+
+    if (inviteeUser) {
+      this.appGateway.server
+        .to(`user:${inviteeUser.id}`)
+        .emit('workspace_invitation_received', formattedInvitation);
+
+      await this.notificationsService.create(inviteeUser.id, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Workspace Invitation',
+        message: `You have been invited to join a new workspace.`,
+        resource: { invitationId: result.id, workspaceId: result.workspaceId },
+      });
+    }
+
+    // Architectural Focus: Normalizing the response to match Section 3.7 of API.md
+    return formattedInvitation;
   }
 
   async findAll(userId: string) {
@@ -138,29 +159,65 @@ export class InvitationsService {
             ? WorkspaceMemberRole.ADMIN
             : WorkspaceMemberRole.MEMBER;
 
-        await tx.workspaceMember.create({
+        const newMember = await tx.workspaceMember.create({
           data: {
             workspaceId: invitation.workspaceId,
             userId: userId,
             role: targetRole,
           },
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                fullName: true,
+                isOnline: true,
+              },
+            },
+          },
         });
+
+        return { updatedInvitation, newMember };
       }
 
-      return updatedInvitation;
+      return { updatedInvitation, newMember: null };
     });
 
-    // TODO: [Feature - WebSockets] If updateDto.action === 'accept', emit 'member_joined' to 'workspace:{result.workspaceId}'.
+    if (updateDto.action === 'accept' && result.newMember) {
+      this.appGateway.server
+        .to(`workspace:${invitation.workspaceId}`)
+        .emit('member_added', {
+          userId: result.newMember.userId,
+          username: result.newMember.user.username,
+          fullName: result.newMember.user.fullName,
+          role: result.newMember.role.toLowerCase(),
+          status: result.newMember.user.isOnline ? 'online' : 'offline',
+        });
+
+      await this.notificationsService.create(invitation.inviterId, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Invitation Accepted',
+        message: `${result.newMember.user.username} accepted your workspace invitation.`,
+        resource: { workspaceId: invitation.workspaceId, newMemberId: userId },
+      });
+    } else if (updateDto.action === 'decline') {
+      await this.notificationsService.create(invitation.inviterId, {
+        type: NotificationType.WORKSPACE_INVITE,
+        title: 'Invitation Declined',
+        message: `Your invitation sent to ${invitation.inviteeEmail} was declined.`,
+        resource: { workspaceId: invitation.workspaceId },
+      });
+    }
 
     // Explicit mapping to decouple DB enums from the API contract.
     return {
-      id: result.id,
-      workspaceId: result.workspaceId,
-      inviterId: result.inviterId,
-      inviteeEmail: result.inviteeEmail,
-      role: result.role.toLowerCase(),
-      status: result.status.toLowerCase(),
-      createdAt: result.createdAt.toISOString(),
+      id: result.updatedInvitation.id,
+      workspaceId: result.updatedInvitation.workspaceId,
+      inviterId: result.updatedInvitation.inviterId,
+      inviteeEmail: result.updatedInvitation.inviteeEmail,
+      role: result.updatedInvitation.role.toLowerCase(),
+      status: result.updatedInvitation.status.toLowerCase(),
+      createdAt: result.updatedInvitation.createdAt.toISOString(),
     };
   }
 }

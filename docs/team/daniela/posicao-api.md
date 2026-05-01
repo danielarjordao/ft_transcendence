@@ -2,31 +2,31 @@
 
 ## 1. Base Configuration e Convenções
 
-- [x] Prefixo global /api
+- [x] Prefixo global `/api`
 - [x] Proteção JWT nos endpoints privados
-- [ ] Autenticação WebSocket no handshake
-- [~] Content-Type de upload suportado, mas validações de tipo/tamanho ainda incompletas
-- [x] Datas em formato serializável ISO na resposta
-- [x] IDs como string
-- [x] Envelopes paginados onde contrato pede paginação
-- [x] Formato global de erro type/message/details
-- [~] Mapeamento fino de tipos de erro (username_taken, email_taken etc.) ainda não 100% específico por cenário
+- [x] Autenticação WebSocket no handshake restrita a *query params*
+- [x] Datas em formato serializável ISO UTC na resposta
+- [x] IDs como string (UUID)
+- [x] Envelopes paginados onde o contrato pede paginação
+- [x] Formato global de erro `type/message/details`
+- [~] Content-Type de upload suportado, mas validações finas de tipo/tamanho pendentes
+- [~] Mapeamento fino de tipos de erro (`username_taken`, `email_taken` etc.) ainda não 100% específico por cenário
 
 ## 2. Authentication & Account
 
 - [x] 1.1 Sign Up
 - [x] 1.2 Sign In
+- [x] 1.9 Get Current User
+- [x] 1.10 Update Profile
+- [x] 1.12 Update Preferences
+- [x] 1.13 Change Password
+- [~] 1.11 Upload Avatar (fluxo básico ok, storage real AWS S3 pendente)
 - [ ] 1.3 Refresh Session
 - [ ] 1.4 Logout
 - [ ] 1.5 Forgot Password
 - [ ] 1.6 Reset Password
-- [~] 1.7 OAuth 42 Redirect (existe, mas com parâmetros mock)
+- [~] 1.7 OAuth 42 Redirect (existe mock)
 - [ ] 1.8 OAuth 42 Callback real
-- [x] 1.9 Get Current User
-- [x] 1.10 Update Profile
-- [~] 1.11 Upload Avatar (fluxo básico ok, validação/storage real pendente)
-- [x] 1.12 Update Preferences
-- [x] 1.13 Change Password
 - [~] 1.14 2FA Setup (mock)
 - [~] 1.15 2FA Verify (mock)
 - [~] 1.16 2FA Disable (mock)
@@ -41,6 +41,7 @@
 - [x] 2.6 Accept Friend Request
 - [x] 2.7 Reject Friend Request
 - [x] 2.8 Remove Friend
+- [x] Presence em tempo real para amigos
 
 ## 4. Workspaces & Memberships
 
@@ -50,11 +51,12 @@
 - [x] 3.4 Update Workspace
 - [x] 3.5 Delete Workspace
 - [x] 3.6 List Workspace Members
-- [x] 3.7 Invite Member by Email
 - [x] 3.8 List My Workspace Invitations
 - [x] 3.9 Respond to Workspace Invitation
 - [x] 3.10 Update Member Role
 - [x] 3.11 Remove Member
+- [x] 3.7 Invite Member by Email
+- [ ] 3.7 Envio do E-mail real de Convite via Nodemailer/SendGrid
 
 ## 5. Workspace Configuration
 
@@ -71,17 +73,17 @@
 
 - [x] 5.1 List and Filter Tasks
 - [x] 5.2 Create Task
-- [~] 5.3 Get Task Details (task + contadores ok; shape "full" pode variar do esperado exato)
 - [x] 5.4 Update Task
 - [x] 5.5 Delete Task
 - [x] 5.6 List Comments
 - [x] 5.7 Add Comment
 - [x] 5.8 Update Comment
 - [x] 5.9 Delete Comment
-- [~] 5.10 List Attachments (metadados básicos)
-- [~] 5.11 Upload Task Attachment (mock de storage, sem validação completa)
-- [~] 5.12 Download/Preview Attachment (ainda retorna metadado, não stream/URL assinada)
-- [~] 5.13 Delete Attachment (remove no banco; remoção física do storage pendente)
+- [x] 5.10 List Attachments
+- [~] 5.3 Get Task Details (task + contadores ok; shape "full" ainda sujeito a afinação)
+- [~] 5.11 Upload Task Attachment (storage AWS S3 pendente)
+- [~] 5.12 Download/Preview Attachment (dependente da AWS)
+- [~] 5.13 Delete Attachment (remoção física da AWS pendente)
 
 ## 7. Chat & Notifications
 
@@ -96,35 +98,34 @@
 
 ## 8. WebSocket Protocol (Socket.io)
 
-- [ ] 7.1 Handshake e autorização
-- [ ] 7.2 Rooms user/workspace
-- [ ] 7.3 Eventos frontend para backend (join_workspace, leave_workspace etc.)
-- [ ] 7.4 Eventos backend para frontend
-- [ ] 7.5 Lifecycle de reconexão/rejoin
+- [x] 7.1 Handshake e autorização restrita
+- [x] 7.2 Rooms user/workspace limpas e separadas
+- [x] 7.3 Eventos frontend para backend (`join_workspace`, `leave_workspace` etc.)
+- [x] 7.4 Eventos backend para frontend mapeados 100% com a API
+- [~] 7.5 Lifecycle de reconexão/rejoin (backend suporta; política é do lado do frontend)
 
 ## 9. Core Domain Objects
 
-- [x] Task Object em geral alinhado
-- [x] Notification Object em geral alinhado
-- [x] Conversation Preview Object em geral alinhado
-
-Ponto de Situação da API (Backend)
+- [x] Task Object alinhado
+- [x] Notification Object alinhado
+- [x] Conversation Preview Object alinhado
+- [x] Friend Request Object estrito
 
 **Pronto para ser testada e integrada com o frontend:**
 
 - **Utilizadores:** Login, Registo, Edição de Perfil e Preferências. Tudo protegido com JWT.
 - **Workspaces (O Core):** Criação, edição, e gestão de permissões de Membros.
 - **Kanban:** Gestão de Subjects (Colunas), Fields e Tasks completas com comentários. Tudo traduzido e paginado.
-- **Social (REST):** Pesquisa de utilizadores, Pedidos de Amizade, histórico do Chat e leitura de Notificações.
+- **Social (REST e Realtime):** Pesquisa de utilizadores, Pedidos de Amizade, histórico do Chat, leitura de Notificações (agora com envio em *batch*) e presença em tempo real.
+- **WebSockets (Tempo Real):** Handshake 100% seguro (barrado sem token na *query*), rooms isoladas (`user:{userId}` e `workspace:{wsId}`), e emissão de eventos limpa e alinhada com o contrato da API.
+- **Notificações (Triggers Automáticos):** Motor centralizado a gerar e persistir notificações automáticas para menções em comentários (`@`), reatribuição de tarefas, convites de workspace e ciclo de amizades.
 
 **Funcionando em Modo "Mock":**
 
-- **Uploads (Avatares e Attachments):** A rota aceita o ficheiro, mas ainda não guarda na AWS S3 real.
+- **Uploads (Avatares e Attachments):** A rota aceita o ficheiro, mas ainda não guarda na AWS S3 real (pendente também a validação fina de tipo e tamanho).
 - **Segurança Extra (2FA e OAuth 42):** As rotas existem e respondem, mas ainda não estão ligadas aos serviços oficiais.
 
 **Pendente:**
 
 - **Autenticação Completa:** Refresh, Logout, Forgot/Reset Password e callback OAuth 42 real.
-- **WebSockets (Tempo Real):** Handshake com autenticação, rooms (`user:{userId}` e `workspace:{wsId}`), eventos `join_workspace` e `leave_workspace`, além dos eventos de atualização em tempo real.
-- **Triggers Automáticos:** O sistema ainda não gera a notificação automaticamente quando alguém faz um comentário ou aceita um convite.
-- **Emails:** Envio real de links de *Reset Password* e *Workspace Invites*.
+- **Emails:** Envio real de links de *Reset Password* e *Workspace Invites* via Nodemailer/SendGrid.

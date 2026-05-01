@@ -11,10 +11,17 @@ import { UpdateTaskDto } from './dto/update-task.dto';
 import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 import { TaskWithRelations } from './interfaces/task-relations.type';
 import { createPaginatedResponse } from '../common/utils/pagination.util';
+import { AppGateway } from '../realtime/app.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../generated/prisma/client';
 
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appGateway: AppGateway,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   // Architectural Focus: Centralized security gatekeeper.
   // Extracts the task and ensures the requesting user is a workspace member in a single query.
@@ -45,7 +52,10 @@ export class TasksService {
   private async getTaskAndCheckAccess(userId: string, taskId: string) {
     const task = await this.prisma.task.findUnique({
       where: { id: taskId },
-      include: { workspace: { include: { members: { where: { userId } } } } },
+      include: {
+        workspace: { include: { members: { where: { userId } } } },
+        field: true,
+      },
     });
 
     if (!task) throw new NotFoundException('Task not found');
@@ -139,9 +149,23 @@ export class TasksService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'task_created' event to the 'workspace:{wsId}' room.
+    const formattedTask = this.formatTaskResponse(newTask);
 
-    return this.formatTaskResponse(newTask);
+    // Broadcast the creation to everyone in the workspace
+    this.appGateway.server
+      .to(`workspace:${wsId}`)
+      .emit('task_created', formattedTask);
+
+    if (newTask.assigneeId && newTask.assigneeId !== userId) {
+      await this.notificationsService.create(newTask.assigneeId, {
+        type: NotificationType.TASK_ASSIGNED,
+        title: 'New Task Assigned',
+        message: `You have been assigned to the task: ${newTask.title}`,
+        resource: { taskId: newTask.id, workspaceId: wsId },
+      });
+    }
+
+    return formattedTask;
   }
 
   async findAll(userId: string, wsId: string, query: ListTasksQueryDto) {
@@ -261,16 +285,56 @@ export class TasksService {
       },
     });
 
-    // TODO: [Feature - WebSockets] Emit 'task_updated' event to 'workspace:{existingTask.workspaceId}'.
-    // TODO: [Feature - WebSockets] If 'newFieldId' differs from 'existingTask.fieldId', emit 'task_moved'.
+    const formattedUpdatedTask = this.formatTaskResponse(updatedTask);
 
-    return this.formatTaskResponse(updatedTask);
+    // Broadcast generic update
+    this.appGateway.server
+      .to(`workspace:${existingTask.workspaceId}`)
+      .emit('task_updated', formattedUpdatedTask);
+
+    // Smart Event: Detect Drag & Drop between columns
+    if (newFieldId && newFieldId !== existingTask.fieldId) {
+      const oldStatusSlug =
+        existingTask.field?.name?.toLowerCase().replace(/\s+/g, '_') ||
+        'unknown';
+      const newStatusSlug = dto.status;
+
+      this.appGateway.server
+        .to(`workspace:${existingTask.workspaceId}`)
+        .emit('task_moved', {
+          taskId: updatedTask.id,
+          oldStatus: oldStatusSlug,
+          newStatus: newStatusSlug,
+          movedBy: userId,
+        });
+    }
+
+    if (
+      updatedTask.assigneeId &&
+      updatedTask.assigneeId !== existingTask.assigneeId &&
+      updatedTask.assigneeId !== userId
+    ) {
+      await this.notificationsService.create(updatedTask.assigneeId, {
+        type: NotificationType.TASK_ASSIGNED,
+        title: 'Task Reassigned',
+        message: `You are now responsible for the task: ${updatedTask.title}`,
+        resource: {
+          taskId: updatedTask.id,
+          workspaceId: existingTask.workspaceId,
+        },
+      });
+    }
+
+    return formattedUpdatedTask;
   }
 
   async remove(userId: string, taskId: string) {
     const _task = await this.getTaskAndCheckAccess(userId, taskId);
     await this.prisma.task.delete({ where: { id: taskId } });
 
-    // TODO: [Feature - WebSockets] Emit 'task_deleted' event to 'workspace:{task.workspaceId}'.
+    // Notify clients to remove the task from their UI
+    this.appGateway.server
+      .to(`workspace:${_task.workspaceId}`)
+      .emit('task_deleted', { taskId });
   }
 }

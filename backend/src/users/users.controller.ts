@@ -11,6 +11,9 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  ParseFilePipe,
+  FileTypeValidator,
+  MaxFileSizeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -81,11 +84,23 @@ export class UsersController {
   // 3. File upload routes
   @Post('avatar')
   @UseInterceptors(FileInterceptor('file'))
-  uploadAvatar(
+  async uploadAvatar(
     @Req() req: RequestWithUser,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5242880 }), // 5MB limit
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/i }), // Regex only allows jpg, jpeg, png
+        ],
+      }),
+    )
+    file: Express.Multer.File,
   ) {
-    return this.usersService.uploadAvatar(this.getUserId(req), file);
+    if (!req.user) {
+      throw new UnauthorizedException('User session not found');
+    }
+
+    return await this.usersService.uploadAvatar(req.user.id, file);
   }
 
   // 4. Dynamic/Parameter routes MUST be last
