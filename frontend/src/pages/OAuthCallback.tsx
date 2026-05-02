@@ -11,9 +11,12 @@ export default function OAuthCallback() {
   useEffect(() => {
     const token = params.get('token');
     if (!token) { navigate('/login'); return; }
+    const postAuthRedirect =
+      sessionStorage.getItem('postAuthRedirect') || '/dashboard';
+    sessionStorage.removeItem('postAuthRedirect');
     authService.getMe().then((user) => {
       login(token, '', user);
-      navigate('/dashboard');
+      navigate(postAuthRedirect, { replace: true });
     }).catch(() => navigate('/login'));
   }, []);
 

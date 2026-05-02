@@ -250,6 +250,8 @@ model WorkspaceInvitation {
   inviterId    String
   inviteeId    String?
   inviteeEmail String
+  inviteTokenHash      String?           @unique
+  inviteTokenExpiresAt DateTime?
   role         WorkspaceInvitationRole   @default(MEMBER)
   status       WorkspaceInvitationStatus @default(PENDING)
   createdAt    DateTime                  @default(now())
@@ -262,6 +264,7 @@ model WorkspaceInvitation {
   @@index([inviterId])
   @@index([inviteeId, status])
   @@index([inviteeEmail, status])
+  @@index([inviteTokenExpiresAt, status])
 }
 
 model Subject {

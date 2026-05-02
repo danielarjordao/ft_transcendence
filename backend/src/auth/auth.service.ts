@@ -532,7 +532,6 @@ export class AuthService {
         username: dto.username,
         fullName: dto.fullName,
         lastLoginAt: new Date(),
-        // TODO: [Feature - OAuth 42] Add logic to determine accountType dynamically based on the registration origin.
         accountType: 'standard',
         authAccounts: {
           create: {

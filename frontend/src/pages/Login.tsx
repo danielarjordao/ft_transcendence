@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth.service';
 
@@ -10,7 +10,9 @@ interface FormErrors {
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
+  const redirectTarget = searchParams.get('redirect') || '/dashboard';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -45,7 +47,7 @@ export default function Login() {
     try {
       const res = await authService.login({ email, password });
       login(res.accessToken, res.refreshToken, res.user);
-      navigate('/dashboard');
+      navigate(redirectTarget, { replace: true });
     } catch (err: any) {
       const msg = err.response?.data?.message;
       setServerError(msg ?? 'Credenciais inválidas. Tenta novamente.');
@@ -55,6 +57,11 @@ export default function Login() {
   };
 
   const handleOAuth42 = () => {
+    if (redirectTarget && redirectTarget !== '/dashboard') {
+      sessionStorage.setItem('postAuthRedirect', redirectTarget);
+    } else {
+      sessionStorage.removeItem('postAuthRedirect');
+    }
     window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/42`;
   };
 
@@ -226,7 +233,10 @@ export default function Login() {
         {/* Footer */}
         <p style={{ textAlign: 'center', color: '#555', fontSize: 13, marginTop: 20 }}>
           Don't have an account?{' '}
-          <Link to="/register" style={{ color: '#CCCCCC', textDecoration: 'none', fontWeight: 500 }}>
+          <Link
+            to={`/register?redirect=${encodeURIComponent(redirectTarget)}`}
+            style={{ color: '#CCCCCC', textDecoration: 'none', fontWeight: 500 }}
+          >
             Sign up
           </Link>
         </p>
