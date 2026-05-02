@@ -115,6 +115,7 @@ All non-2xx responses must follow this shape:
 * `token_expired`
 * `forbidden`
 * `not_found`
+* `conflict`
 * `username_taken`
 * `email_taken`
 * `invalid_credentials`
@@ -175,8 +176,35 @@ All non-2xx responses must follow this shape:
 }
 ```
 
-* **Response (200 OK):** same shape as sign-up.
+* **Response (200 OK):**
+
+If the user does not have 2FA enabled, same shape as sign-up.
+
+If the user has 2FA enabled:
+
+```json
+{
+  "requiresTwoFactor": true,
+  "twoFactorToken": "temporary-two-factor-token"
+}
+```
+
 * **Errors:** `400 validation_error`, `401 invalid_credentials`, `429 rate_limited`.
+
+### 1.2.1 Complete Two-Factor Sign-In
+
+* **POST** `/api/auth/2fa/sign-in`
+* **Request Payload:**
+
+```json
+{
+  "twoFactorToken": "temporary-two-factor-token",
+  "code": "123456"
+}
+```
+
+* **Response (200 OK):** same shape as sign-up.
+* **Errors:** `400 validation_error`, `401 unauthorized`, `429 rate_limited`.
 
 ### 1.3 Refresh Session
 
@@ -250,8 +278,14 @@ All non-2xx responses must follow this shape:
 ### 1.8 OAuth 42 Callback
 
 * **GET** `/api/auth/42/callback?code=oauth_code`
-* **Response (200 OK):** same shape as sign-up, with `accountType: "oauth_42"` when applicable.
-* **Errors:** `400 invalid_oauth_code`, `401 unauthorized`.
+* **Response (302 Found):**
+  * validates the OAuth `state`
+  * sets internal `accessToken` and `refreshToken` as `httpOnly` cookies
+  * redirects the browser to the frontend OAuth callback route
+* **Errors:**
+  * `302` redirect to frontend with `?error=oauth_state` when `state` is missing or invalid
+  * `401 invalid_oauth_code`
+  * `401 unauthorized`
 
 ### 1.9 Get Current User
 

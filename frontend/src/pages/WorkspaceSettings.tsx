@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
+import { workspaceInvitationsService } from '../services/workspace-invitations.service';
 import { useWorkspaceStore } from '../store/workspace.store';
 
 const ACCENT_COLORS = [
@@ -76,8 +77,10 @@ export default function WorkspaceSettings() {
   const [nameSaved, setNameSaved]         = useState(false);
   const [members, setMembers]             = useState<Member[]>(MOCK_MEMBERS);
   const [addInput, setAddInput]           = useState('');
+  const [inviteRole, setInviteRole]       = useState<'member' | 'admin'>('member');
   const [addError, setAddError]           = useState('');
   const [addSuccess, setAddSuccess]       = useState('');
+  const [isInviting, setIsInviting]       = useState(false);
   const [confirm, setConfirm]             = useState<{
     type: 'remove_member' | 'delete_workspace';
     memberId?: string;
@@ -109,25 +112,39 @@ export default function WorkspaceSettings() {
     // TODO: conectar a PATCH /api/workspaces/:id quando backend estiver pronto
   };
 
-  const handleAddMember = () => {
-    const username = addInput.trim().toLowerCase();
-    if (!username) return;
-    if (members.some(m => m.username === username)) {
-      setAddError('This user is already a member.');
+  const handleAddMember = async () => {
+    const email = addInput.trim().toLowerCase();
+
+    if (!email) {
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setAddError('Enter a valid email address.');
       setAddSuccess('');
       return;
     }
-    setMembers(prev => [...prev, {
-      id: `m${Date.now()}`,
-      username,
-      email: `${username}@42.fr`,
-      role: 'Member',
-      isCreator: false,
-    }]);
-    setAddInput('');
+
+    setIsInviting(true);
     setAddError('');
-    setAddSuccess(`@${username} added to workspace.`);
-    setTimeout(() => setAddSuccess(''), 3000);
+    setAddSuccess('');
+
+    try {
+      await workspaceInvitationsService.inviteMember(workspaceId!, {
+        email,
+        role: inviteRole,
+      });
+      setAddInput('');
+      setAddSuccess(`Invitation sent to ${email}.`);
+      setTimeout(() => setAddSuccess(''), 3000);
+    } catch (err: any) {
+      setAddError(
+        err.response?.data?.message ||
+          'We could not send the invitation right now.',
+      );
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   const handleRemoveMember = (id: string) => {
@@ -227,23 +244,31 @@ export default function WorkspaceSettings() {
               Members <span style={{ color: '#555', fontWeight: 400, fontSize: 13 }}>({members.length})</span>
             </p>
 
-            {/* add member */}
+            {/* invite member */}
             <div style={{ marginBottom: 16 }}>
-              <label style={labelStyle}>Add member</label>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <label style={labelStyle}>Invite member by email</label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input
                   value={addInput}
                   onChange={e => { setAddInput(e.target.value); setAddError(''); }}
                   onKeyDown={e => { if (e.key === 'Enter') handleAddMember(); }}
-                  placeholder="Enter username..."
+                  placeholder="teammate@example.com"
                   style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '9px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
                 />
+                <select
+                  value={inviteRole}
+                  onChange={e => setInviteRole(e.target.value as 'member' | 'admin')}
+                  style={{ background: '#222222', border: '1px solid #3A3A3A', borderRadius: 8, padding: '9px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                </select>
                 <button
                   onClick={handleAddMember}
-                  disabled={!addInput.trim()}
-                  style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}
+                  disabled={!addInput.trim() || isInviting}
+                  style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: addInput.trim() && !isInviting ? '#7B68EE' : '#2A2A2A', color: addInput.trim() && !isInviting ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() && !isInviting ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}
                 >
-                  Add
+                  {isInviting ? 'Sending...' : 'Send invite'}
                 </button>
               </div>
               {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{addError}</p>}

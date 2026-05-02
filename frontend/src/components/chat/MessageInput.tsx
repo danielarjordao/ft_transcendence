@@ -16,7 +16,7 @@ export default function MessageInput({
   disabled = false,
 }: MessageInputProps) {
   const [message, setMessage] = useState('');
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
  
   const handleSend = () => {

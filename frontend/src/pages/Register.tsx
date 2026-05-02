@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth.service';
 
@@ -21,7 +21,9 @@ interface FormErrors {
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login } = useAuth();
+  const redirectTarget = searchParams.get('redirect') || '/dashboard';
 
   const [form, setForm] = useState<FormFields>({
     fullName: '',
@@ -87,7 +89,7 @@ export default function Register() {
         fullName: form.fullName,
       });
       login(res.accessToken, res.refreshToken, res.user);
-      navigate('/dashboard');
+      navigate(redirectTarget, { replace: true });
     } catch (err: any) {
       const status = err.response?.status;
       const type = err.response?.data?.type;
@@ -271,7 +273,10 @@ export default function Register() {
         {/* Footer */}
         <p style={{ textAlign: 'center', color: '#555', fontSize: 13, marginTop: 20 }}>
           Already have an account?{' '}
-          <Link to="/login" style={{ color: '#CCCCCC', textDecoration: 'none', fontWeight: 500 }}>
+          <Link
+            to={`/login?redirect=${encodeURIComponent(redirectTarget)}`}
+            style={{ color: '#CCCCCC', textDecoration: 'none', fontWeight: 500 }}
+          >
             Sign in
           </Link>
         </p>

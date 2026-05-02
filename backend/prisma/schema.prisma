@@ -63,6 +63,7 @@ model User {
   passwordChangedAt            DateTime?
   lastLoginAt                  DateTime?
   twoFactorEnabled             Boolean               @default(false)
+  twoFactorPendingSecretEnc    String?
   twoFactorSecretEnc           String?
   twoFactorConfirmedAt         DateTime?
   createdAt                    DateTime              @default(now())
@@ -249,6 +250,8 @@ model WorkspaceInvitation {
   inviterId    String
   inviteeId    String?
   inviteeEmail String
+  inviteTokenHash      String?
+  inviteTokenExpiresAt DateTime?
   role         WorkspaceInvitationRole   @default(MEMBER)
   status       WorkspaceInvitationStatus @default(PENDING)
   createdAt    DateTime                  @default(now())
@@ -261,6 +264,8 @@ model WorkspaceInvitation {
   @@index([inviterId])
   @@index([inviteeId, status])
   @@index([inviteeEmail, status])
+  @@index([inviteTokenHash])
+  @@index([inviteTokenExpiresAt, status])
 }
 
 model Subject {

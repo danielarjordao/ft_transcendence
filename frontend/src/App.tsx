@@ -12,6 +12,7 @@ import Friends from './pages/Friends';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
 import WorkspaceSettings from './pages/WorkspaceSettings';
+import WorkspaceInvitationAccept from './pages/WorkspaceInvitationAccept';
 
 export default function App() {
   return (
@@ -23,6 +24,10 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/auth/callback" element={<OAuthCallback />} />
+            <Route
+              path="/workspace-invitations/accept"
+              element={<WorkspaceInvitationAccept />}
+            />
             <Route path="/privacy-policy" element={<PrivacyPolicy />} />
             <Route path="/terms-of-service" element={<TermsOfService />} />
             <Route

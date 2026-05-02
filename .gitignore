@@ -5,6 +5,7 @@
 dist/
 .env
 .env.local
+certs/*.pem
 
 .agents/
 .codex/
@@ -14,3 +15,4 @@ package-lock-explicacao.md
 autenticacao.md
 
 node_modules/
+coverage/

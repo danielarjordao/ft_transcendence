@@ -1,18 +1,46 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import type { Request } from 'express';
 import { ActiveUserDto } from '../../common/guards/interfaces/active-user.interface';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { getCookieValue } from '../utils/cookies';
+
+const extractAccessTokenFromCookie = (
+  request: Request | undefined,
+): string | null => {
+  const token = getCookieValue(request?.headers.cookie, 'accessToken');
+  return token || null;
+};
+
+function resolveAccessTokenSecret(): string {
+  const secret = process.env.JWT_ACCESS_SECRET;
+
+  if (!secret) {
+    throw new Error('JWT_ACCESS_SECRET is not configured');
+  }
+
+  return secret;
+}
 
 @Injectable()
+// Behind the scenes flow (Instantiation vs Execution):
+// - Instantiation: This class is created as a Singleton exactly once when the NestJS server starts. 
+//   Its constructor runs and registers this strategy inside the Passport library under the name 'jwt'.
+// - Execution: Its validation logic (extracting the token, verifying the signature, and calling validate()) 
+//   is ONLY triggered when a Guard's canActivate() method explicitly asks Passport to run the 'jwt' strategy.
+//   Ex: @UseGuards(JwtAuthGuard)
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor() {
     // Verify that the strategy is configured to extract the token from the Authorization header,
     // and that it strictly checks expiration dates using the environment secret.
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        extractAccessTokenFromCookie,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_ACCESS_SECRET || 'default_dev_secret',
+      secretOrKey: resolveAccessTokenSecret(),
     });
   }
 
