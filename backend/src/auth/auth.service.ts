@@ -504,15 +504,24 @@ export class AuthService {
   }
 
   async signUp(dto: SignUpDto, context?: SessionContext) {
-    // Fail-Fast: Verify the database for existing constraints before initiating hashing.
-    const existingUser = await this.prisma.user.findFirst({
-      where: {
-        OR: [{ email: dto.email }, { username: dto.username }],
-      },
-    });
+    // Fail-Fast: Verify duplicate email and username explicitly so the API can expose a more precise conflict type.
+    const [existingEmailUser, existingUsernameUser] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { email: dto.email },
+        select: { id: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { username: dto.username },
+        select: { id: true },
+      }),
+    ]);
 
-    if (existingUser) {
-      throw new ConflictException('Email or username already in use');
+    if (existingEmailUser) {
+      throw new ConflictException('Email is already taken');
+    }
+
+    if (existingUsernameUser) {
+      throw new ConflictException('Username is already taken');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);

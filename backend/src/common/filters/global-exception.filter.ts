@@ -9,6 +9,39 @@ import { Response } from 'express';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  private resolveSpecificType(
+    status: number,
+    message: string,
+  ): string | null {
+    if (status === HttpStatus.UNAUTHORIZED) {
+      switch (message) {
+        case 'Invalid credentials':
+        case 'Invalid current password':
+          return 'invalid_credentials';
+        case 'Token expired':
+        case 'Reset token expired':
+          return 'token_expired';
+        case 'Invalid OAuth code':
+          return 'invalid_oauth_code';
+        default:
+          return null;
+      }
+    }
+
+    if (status === HttpStatus.CONFLICT) {
+      switch (message) {
+        case 'Email is already taken':
+          return 'email_taken';
+        case 'Username is already taken':
+          return 'username_taken';
+        default:
+          return null;
+      }
+    }
+
+    return null;
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
@@ -39,6 +72,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         message = 'The request payload is invalid.';
         details = { field: responseBody.message[0] };
       } else {
+        const specificType = this.resolveSpecificType(status, message);
+
+        if (specificType) {
+          type = specificType;
+          response.status(status).json({ type, message, details });
+          return;
+        }
+
         // Map common HTTP exceptions to specific types for better frontend handling
         switch (status) {
           case HttpStatus.UNAUTHORIZED:

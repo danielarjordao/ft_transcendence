@@ -74,6 +74,7 @@ export class AuthController {
   }
 
   @Post('sign-up')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   signUp(@Body() dto: SignUpDto, @Req() req: Request) {
     return this.authService.signUp(dto, this.getSessionContext(req));
   }
