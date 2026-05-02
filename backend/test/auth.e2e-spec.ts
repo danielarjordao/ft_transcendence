@@ -2,6 +2,7 @@ import {
   CanActivate,
   ExecutionContext,
   INestApplication,
+  UnauthorizedException,
   ValidationPipe,
 } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -156,6 +157,54 @@ describe('Auth and Users HTTP flows (e2e)', () => {
       });
   });
 
+  it('POST /api/auth/sign-up respeita rate limit', async () => {
+    authService.signUp.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 'user-1',
+        email: 'ana@example.com',
+      },
+    });
+
+    const payload = {
+      email: 'ana@example.com',
+      password: 'Senha123',
+      fullName: 'Ana Silva',
+      username: 'ana.silva',
+    };
+
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send(payload)
+      .expect(429)
+      .expect({
+        type: 'rate_limited',
+        message: 'ThrottlerException: Too Many Requests',
+        details: null,
+      });
+  });
+
   it('POST /api/auth/sign-in', async () => {
     authService.signIn.mockResolvedValue({
       accessToken: 'access-token',
@@ -171,6 +220,33 @@ describe('Auth and Users HTTP flows (e2e)', () => {
       .send({
         email: 'ana@example.com',
         password: 'Senha123',
+      })
+      .expect(200)
+      .expect({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        user: {
+          id: 'user-1',
+          email: 'ana@example.com',
+        },
+      });
+  });
+
+  it('POST /api/auth/2fa/sign-in', async () => {
+    authService.signInWithTwoFactor.mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 'user-1',
+        email: 'ana@example.com',
+      },
+    });
+
+    await request(app.getHttpServer())
+      .post('/api/auth/2fa/sign-in')
+      .send({
+        twoFactorToken: 'temporary-token',
+        code: '123456',
       })
       .expect(200)
       .expect({
@@ -308,6 +384,31 @@ describe('Auth and Users HTTP flows (e2e)', () => {
       .expect(204);
   });
 
+  it('PATCH /api/account/password', async () => {
+    accountService.changePassword.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .patch('/api/account/password')
+      .set('Authorization', 'Bearer access-token')
+      .send({
+        currentPassword: 'SenhaAtual123',
+        newPassword: 'NovaSenha123',
+      })
+      .expect(204);
+  });
+
+  it('DELETE /api/account/2fa', async () => {
+    accountService.disable2fa.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .delete('/api/account/2fa')
+      .set('Authorization', 'Bearer access-token')
+      .send({
+        code: '123456',
+      })
+      .expect(204);
+  });
+
   it('GET /api/auth/42 redireciona para a 42 e define cookie de state', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/auth/42')
@@ -379,6 +480,26 @@ describe('Auth and Users HTTP flows (e2e)', () => {
         expect.stringContaining('oauth42_state=;'),
       ]),
     );
+  });
+
+  it('GET /api/auth/42/callback com code invalido retorna invalid_oauth_code', async () => {
+    authService.oauth42Callback.mockRejectedValue(
+      new UnauthorizedException('Invalid OAuth code'),
+    );
+
+    await request(app.getHttpServer())
+      .get('/api/auth/42/callback')
+      .query({
+        code: 'invalid-oauth-code',
+        state: 'expected-state',
+      })
+      .set('Cookie', ['oauth42_state=expected-state'])
+      .expect(401)
+      .expect({
+        type: 'invalid_oauth_code',
+        message: 'Invalid OAuth code',
+        details: null,
+      });
   });
 
   it('valida payload invalido antes de chegar no service', async () => {

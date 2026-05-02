@@ -108,7 +108,9 @@ describe('AuthService', () => {
   });
 
   it('signup cria usuario com senha hasheada e sessao persistida', async () => {
-    prisma.user.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
     prisma.user.create.mockImplementation(async ({ data }) => ({
       id: 'user-1',
       email: data.email,
@@ -168,7 +170,9 @@ describe('AuthService', () => {
   });
 
   it('signup nao permite email ou username duplicado', async () => {
-    prisma.user.findFirst.mockResolvedValue({ id: 'existing-user' });
+    prisma.user.findUnique
+      .mockResolvedValueOnce({ id: 'existing-user' })
+      .mockResolvedValueOnce(null);
 
     await expect(
       service.signUp({
@@ -281,6 +285,27 @@ describe('AuthService', () => {
         accountType: 'standard',
       },
     });
+  });
+
+  it('signinWithTwoFactor rejeita codigo invalido', async () => {
+    (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+      sub: 'user-1',
+      purpose: '2fa',
+    });
+    verifyTwoFactorCodeMock.mockResolvedValue(false);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'ana@example.com',
+      twoFactorEnabled: true,
+      twoFactorSecretEnc: encryptSecret('two-factor-secret'),
+    });
+
+    await expect(
+      service.signInWithTwoFactor({
+        twoFactorToken: '2fa-token',
+        code: '000000',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid two-factor code'));
   });
 
   it('refresh rejeita token invalido', async () => {

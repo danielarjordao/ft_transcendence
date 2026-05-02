@@ -1,4 +1,5 @@
 import { UnauthorizedException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import * as QRCode from 'qrcode';
 import { encryptSecret } from '../common/utils/secret-crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -75,6 +76,38 @@ describe('AccountService', () => {
     expect(encryptedSecret).not.toBe(result.secret);
   });
 
+  it('changePassword falha com senha atual invalida', async () => {
+    prisma.authAccount.findFirst.mockResolvedValue({
+      id: 'auth-1',
+      passwordHash: await bcrypt.hash('Senha123', 10),
+    });
+
+    await expect(
+      service.changePassword('user-1', {
+        currentPassword: 'SenhaErrada',
+        newPassword: 'NovaSenha123',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid current password'));
+  });
+
+  it('changePassword atualiza o hash da senha quando a senha atual esta correta', async () => {
+    prisma.authAccount.findFirst.mockResolvedValue({
+      id: 'auth-1',
+      passwordHash: await bcrypt.hash('Senha123', 10),
+    });
+    prisma.authAccount.update.mockResolvedValue({});
+
+    await expect(
+      service.changePassword('user-1', {
+        currentPassword: 'Senha123',
+        newPassword: 'NovaSenha123',
+      }),
+    ).resolves.toBeUndefined();
+
+    const updatedHash = prisma.authAccount.update.mock.calls[0][0].data.passwordHash;
+    await expect(bcrypt.compare('NovaSenha123', updatedHash)).resolves.toBe(true);
+  });
+
   it('verify2fa com codigo invalido falha', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
@@ -142,5 +175,22 @@ describe('AccountService', () => {
         twoFactorConfirmedAt: null,
       },
     });
+  });
+
+  it('disable2fa com codigo invalido falha', async () => {
+    const encryptedSecret = encryptSecret('two-factor-secret');
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      twoFactorEnabled: true,
+      twoFactorSecretEnc: encryptedSecret,
+    });
+    verifyTwoFactorCodeMock.mockResolvedValue(false);
+
+    await expect(
+      service.disable2fa('user-1', {
+        code: '000000',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid two-factor code'));
   });
 });
