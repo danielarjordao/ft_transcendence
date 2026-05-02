@@ -159,6 +159,48 @@ describe('InvitationsService', () => {
     );
   });
 
+  it('create falha se o convidante nao tiver permissao administrativa', async () => {
+    prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+
+    await expect(
+      service.create('inviter-1', 'ws-1', {
+        email: 'invitee@example.com',
+        role: 'member',
+      }),
+    ).rejects.toThrow(
+      new ForbiddenException('Only Admins or Owners can invite members.'),
+    );
+  });
+
+  it('create falha se ja existir convite pendente para o mesmo email', async () => {
+    prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'OWNER' });
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'inviter-1',
+        username: 'ana',
+        fullName: 'Ana Silva',
+      });
+    prisma.workspace.findUnique.mockResolvedValue({
+      id: 'ws-1',
+      name: 'Fazelo Core',
+    });
+    prisma.workspaceInvitation.findFirst.mockResolvedValue({
+      id: 'existing-inv',
+    });
+
+    await expect(
+      service.create('inviter-1', 'ws-1', {
+        email: 'invitee@example.com',
+        role: 'member',
+      }),
+    ).rejects.toThrow(
+      new ConflictException(
+        'A pending invitation already exists for this email.',
+      ),
+    );
+  });
+
   it('create remove o convite se o envio do email falhar', async () => {
     prisma.workspaceMember.findUnique.mockResolvedValue({ role: 'OWNER' });
     prisma.user.findUnique
@@ -299,6 +341,34 @@ describe('InvitationsService', () => {
     );
   });
 
+  it('claimByToken falha se o convite estiver expirado', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      email: 'invitee@example.com',
+    });
+    prisma.workspaceInvitation.findFirst.mockResolvedValue({
+      id: 'inv-1',
+      workspaceId: 'ws-1',
+      inviterId: 'inviter-1',
+      inviteeId: null,
+      inviteeEmail: 'invitee@example.com',
+      role: 'MEMBER',
+      status: 'PENDING',
+      createdAt: new Date('2026-05-02T12:00:00.000Z'),
+      respondedAt: null,
+      inviteTokenExpiresAt: new Date('2026-05-01T12:00:00.000Z'),
+      workspace: { id: 'ws-1', name: 'Fazelo Core' },
+      inviter: {
+        id: 'inviter-1',
+        username: 'ana',
+        fullName: 'Ana Silva',
+      },
+    });
+
+    await expect(
+      service.claimByToken('user-1', 'secure-token'),
+    ).rejects.toThrow(new ConflictException('Invitation link expired'));
+  });
+
   it('findAll vincula convites pendentes pelo email antes de listar', async () => {
     prisma.user.findUnique.mockResolvedValue({
       email: 'invitee@example.com',
@@ -366,5 +436,75 @@ describe('InvitationsService', () => {
     await expect(
       service.update('user-1', 'inv-1', { action: 'accept' }),
     ).rejects.toThrow(new ConflictException('Invitation link expired'));
+  });
+
+  it('update aceita convite e emite member_added', async () => {
+    prisma.workspaceInvitation.findUnique.mockResolvedValue({
+      id: 'inv-1',
+      workspaceId: 'ws-1',
+      inviterId: 'inviter-1',
+      inviteeId: 'user-1',
+      inviteeEmail: 'invitee@example.com',
+      role: 'ADMIN',
+      status: 'PENDING',
+      createdAt: new Date('2026-05-02T12:00:00.000Z'),
+      respondedAt: null,
+      inviteTokenExpiresAt: new Date('2026-05-09T12:00:00.000Z'),
+    });
+    prisma.$transaction.mockImplementation(async (callback) =>
+      callback({
+        workspaceInvitation: {
+          update: jest.fn().mockResolvedValue({
+            id: 'inv-1',
+            workspaceId: 'ws-1',
+            inviterId: 'inviter-1',
+            inviteeId: 'user-1',
+            inviteeEmail: 'invitee@example.com',
+            role: 'ADMIN',
+            status: 'ACCEPTED',
+            createdAt: new Date('2026-05-02T12:00:00.000Z'),
+            respondedAt: new Date('2026-05-02T12:10:00.000Z'),
+            inviteTokenExpiresAt: new Date('2026-05-09T12:00:00.000Z'),
+          }),
+        },
+        workspaceMember: {
+          create: jest.fn().mockResolvedValue({
+            userId: 'user-1',
+            role: 'ADMIN',
+            user: {
+              id: 'user-1',
+              username: 'invitee',
+              fullName: 'Invitee User',
+              isOnline: true,
+            },
+          }),
+        },
+      }),
+    );
+
+    const result = await service.update('user-1', 'inv-1', {
+      action: 'accept',
+    });
+
+    expect(emitMock).toHaveBeenCalledWith('member_added', {
+      userId: 'user-1',
+      username: 'invitee',
+      fullName: 'Invitee User',
+      role: 'admin',
+      status: 'online',
+    });
+    expect(notificationsService.create).toHaveBeenCalledWith('inviter-1', {
+      type: 'WORKSPACE_INVITE',
+      title: 'Invitation Accepted',
+      message: 'invitee accepted your workspace invitation.',
+      resource: { workspaceId: 'ws-1', newMemberId: 'user-1' },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'inv-1',
+        status: 'accepted',
+        role: 'admin',
+      }),
+    );
   });
 });

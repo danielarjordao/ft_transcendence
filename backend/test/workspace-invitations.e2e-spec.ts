@@ -82,6 +82,19 @@ describe('Workspace invitations HTTP flows (e2e)', () => {
     );
   });
 
+  it('GET /api/workspace-invitations/preview valida token obrigatorio', async () => {
+    await request(app.getHttpServer())
+      .get('/api/workspace-invitations/preview')
+      .expect(400)
+      .expect({
+        type: 'validation_error',
+        message: 'The request payload is invalid.',
+        details: {
+          field: 'token should not be empty',
+        },
+      });
+  });
+
   it('GET /api/workspace-invitations', async () => {
     invitationsService.findAll.mockResolvedValue([
       {
@@ -124,6 +137,20 @@ describe('Workspace invitations HTTP flows (e2e)', () => {
       'user-1',
       'invite-token',
     );
+  });
+
+  it('POST /api/workspace-invitations/claim valida token obrigatorio', async () => {
+    await request(app.getHttpServer())
+      .post('/api/workspace-invitations/claim')
+      .send({})
+      .expect(400)
+      .expect({
+        type: 'validation_error',
+        message: 'The request payload is invalid.',
+        details: {
+          field: 'token should not be empty',
+        },
+      });
   });
 
   it('PATCH /api/workspace-invitations/:invitationId valida action', async () => {
