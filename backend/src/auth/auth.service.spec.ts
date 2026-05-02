@@ -622,4 +622,538 @@ describe('AuthService', () => {
     });
     expect(prisma.session.create).toHaveBeenCalled();
   });
+
+  it('signup nao permite username duplicado', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'existing-user' });
+
+    await expect(
+      service.signUp({
+        email: 'ana@example.com',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana.silva',
+      }),
+    ).rejects.toThrow(new ConflictException('Username is already taken'));
+  });
+
+  it('signin sem 2FA retorna tokens, cria sessao e atualiza lastLoginAt', async () => {
+    const passwordHash = await bcrypt.hash('Senha123', 10);
+
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'ana@example.com',
+      username: 'ana',
+      fullName: 'Ana',
+      bio: null,
+      avatarUrl: null,
+      accountType: 'standard',
+      twoFactorEnabled: false,
+      twoFactorSecretEnc: null,
+      authAccounts: [{ id: 'auth-1', passwordHash }],
+    });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+    prisma.session.create.mockResolvedValue({ id: 'session-1' });
+    prisma.user.update.mockResolvedValue({});
+
+    await expect(
+      service.signIn(
+        { email: 'ana@example.com', password: 'Senha123' },
+        { userAgent: 'jest', ipAddress: '127.0.0.1' },
+      ),
+    ).resolves.toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 'user-1',
+        email: 'ana@example.com',
+        fullName: 'Ana',
+        username: 'ana',
+        bio: '',
+        avatarUrl: null,
+        accountType: 'standard',
+      },
+    });
+
+    expect(prisma.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-1',
+        refreshTokenHash: hashToken('refresh-token'),
+      }),
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: { lastLoginAt: expect.any(Date) },
+    });
+  });
+
+  it('signin rejeita usuario inexistente sem vazar diferenca', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.signIn({
+        email: 'unknown@example.com',
+        password: 'Senha123',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+  });
+
+  it('signin rejeita usuario sem authAccount LOCAL (oauth-only)', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-42',
+      email: 'oauth@example.com',
+      authAccounts: [],
+    });
+
+    await expect(
+      service.signIn({
+        email: 'oauth@example.com',
+        password: 'Senha123',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+  });
+
+  it('signin rejeita quando passwordHash esta ausente', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'ana@example.com',
+      authAccounts: [{ id: 'auth-1', passwordHash: null }],
+    });
+
+    await expect(
+      service.signIn({ email: 'ana@example.com', password: 'Senha123' }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+  });
+
+  it('signInWithTwoFactor rejeita token JWT invalido', async () => {
+    (jwtService.verifyAsync as jest.Mock).mockRejectedValue(new Error('boom'));
+
+    await expect(
+      service.signInWithTwoFactor({
+        twoFactorToken: 'broken',
+        code: '123456',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid two-factor token'));
+  });
+
+  it('signInWithTwoFactor rejeita token com purpose errado', async () => {
+    (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+      sub: 'user-1',
+      purpose: 'other',
+    });
+
+    await expect(
+      service.signInWithTwoFactor({
+        twoFactorToken: 'wrong-purpose',
+        code: '123456',
+      }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid two-factor token'));
+  });
+
+  it('refresh rejeita sessao expirada', async () => {
+    (jwtService.verifyAsync as jest.Mock).mockResolvedValue({
+      sub: 'user-1',
+      email: 'ana@example.com',
+    });
+    prisma.session.findUnique.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      status: SESSION_STATUS.ACTIVE,
+      revokedAt: null,
+      expiresAt: new Date(Date.now() - 1_000),
+    });
+
+    await expect(
+      service.refresh({ refreshToken: 'expired-token' }),
+    ).rejects.toThrow(new UnauthorizedException('Invalid refresh token'));
+  });
+
+  it('refresh rejeita quando dto nao traz refreshToken', async () => {
+    await expect(service.refresh({})).rejects.toThrow(
+      new UnauthorizedException('Invalid refresh token'),
+    );
+
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+  });
+
+  it('logout sem refresh token nao consulta sessao', async () => {
+    await expect(service.logout({})).resolves.toBeUndefined();
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('logout sem sessao correspondente nao falha', async () => {
+    prisma.session.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.logout({ refreshToken: 'whatever' }),
+    ).resolves.toBeUndefined();
+    expect(prisma.session.update).not.toHaveBeenCalled();
+  });
+
+  it('resetPassword rejeita token inexistente', async () => {
+    prisma.passwordResetToken.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.resetPassword({
+        token: 'no-such',
+        newPassword: 'NovaSenha123',
+      }),
+    ).rejects.toThrow('Reset token not found');
+  });
+
+  it('oauth42Callback atualiza user existente associado a 42 sem criar duplicata', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'provider-access-token' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 42,
+          email: 'oauth@example.com',
+          login: 'oauth_user',
+          displayname: 'OAuth User',
+          image: { link: 'https://cdn.example.com/avatar.png' },
+        }),
+      });
+    global.fetch = fetchMock as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue({
+      id: 'auth-42',
+      user: {
+        id: 'user-42',
+        email: 'oauth@example.com',
+      },
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-42',
+      email: 'oauth@example.com',
+      username: 'oauth_user',
+      fullName: 'OAuth User',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      accountType: 'oauth_42',
+    });
+    prisma.authAccount.update.mockResolvedValue({});
+    prisma.session.create.mockResolvedValue({ id: 'session-42' });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.oauth42Callback('oauth-code', {
+      userAgent: 'jest',
+      ipAddress: '127.0.0.1',
+    });
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.authAccount.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-42' },
+      data: expect.objectContaining({ accountType: 'oauth_42' }),
+    });
+    expect(prisma.authAccount.update).toHaveBeenCalled();
+  });
+
+  it('oauth42Callback rejeita quando troca do code falha', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await expect(service.oauth42Callback('bad-code')).rejects.toThrow(
+      new UnauthorizedException('Invalid OAuth code'),
+    );
+  });
+
+  it('oauth42Callback rejeita quando access_token nao vem na resposta', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as unknown as typeof fetch;
+
+    await expect(service.oauth42Callback('bad-code')).rejects.toThrow(
+      new UnauthorizedException('Invalid OAuth code'),
+    );
+  });
+
+  it('oauth42Callback rejeita quando fetch do perfil falha', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({}),
+      }) as unknown as typeof fetch;
+
+    await expect(service.oauth42Callback('oauth-code')).rejects.toThrow(
+      new UnauthorizedException('Unable to fetch 42 profile'),
+    );
+  });
+
+  it('oauth42Callback rejeita perfil malformado', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: null }),
+      }) as unknown as typeof fetch;
+
+    await expect(service.oauth42Callback('oauth-code')).rejects.toThrow(
+      'Invalid 42 profile payload',
+    );
+  });
+
+  it('oauth42Callback vincula AuthAccount da 42 a usuario local existente pelo email', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 42,
+          email: 'ana@example.com',
+          login: 'oauth_user',
+          displayname: 'OAuth User',
+          image: {
+            link: 'https://cdn.example.com/avatar.png',
+          },
+        }),
+      }) as unknown as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-local',
+      email: 'ana@example.com',
+      fullName: null,
+      avatarUrl: null,
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-local',
+      email: 'ana@example.com',
+      username: 'ana',
+      fullName: 'OAuth User',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      accountType: 'oauth_42',
+    });
+    prisma.authAccount.create.mockResolvedValue({});
+    prisma.session.create.mockResolvedValue({ id: 'session-local' });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.oauth42Callback('oauth-code');
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-local' },
+      data: {
+        fullName: 'OAuth User',
+        avatarUrl: 'https://cdn.example.com/avatar.png',
+        accountType: 'oauth_42',
+        lastLoginAt: expect.any(Date),
+      },
+    });
+    expect(prisma.authAccount.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-local',
+        provider: AUTH_PROVIDER.FORTY_TWO,
+        providerAccountId: '42',
+        providerEmail: 'ana@example.com',
+      }),
+    });
+  });
+
+  it('oauth42Callback preserva fullName e avatar existentes ao vincular por email', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 42,
+          email: 'ana@example.com',
+          login: 'oauth_user',
+          displayname: 'OAuth User',
+          image: {
+            link: 'https://cdn.example.com/new-avatar.png',
+          },
+        }),
+      }) as unknown as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-local',
+      email: 'ana@example.com',
+      fullName: 'Ana Original',
+      avatarUrl: 'https://cdn.example.com/original-avatar.png',
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-local',
+      email: 'ana@example.com',
+      username: 'ana',
+      fullName: 'Ana Original',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/original-avatar.png',
+      accountType: 'oauth_42',
+    });
+    prisma.authAccount.create.mockResolvedValue({});
+    prisma.session.create.mockResolvedValue({ id: 'session-local' });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.oauth42Callback('oauth-code');
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-local' },
+      data: {
+        fullName: 'Ana Original',
+        avatarUrl: 'https://cdn.example.com/original-avatar.png',
+        accountType: 'oauth_42',
+        lastLoginAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('oauth42Callback cria username unico sanitizado quando login ja existe', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 42,
+          email: 'novo@example.com',
+          login: 'OAuth User!!',
+          displayname: 'OAuth User',
+          image: {
+            link: 'https://cdn.example.com/avatar.png',
+          },
+        }),
+      }) as unknown as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'taken-1' })
+      .mockResolvedValueOnce(null);
+    prisma.user.create.mockResolvedValue({
+      id: 'user-42',
+      email: 'novo@example.com',
+      username: 'oauth_user_1',
+      fullName: 'OAuth User',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      accountType: 'oauth_42',
+    });
+    prisma.authAccount.create.mockResolvedValue({});
+    prisma.session.create.mockResolvedValue({ id: 'session-42' });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.oauth42Callback('oauth-code');
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: 'novo@example.com',
+        username: 'oauth_user_1',
+        fullName: 'OAuth User',
+        avatarUrl: 'https://cdn.example.com/avatar.png',
+        accountType: 'oauth_42',
+      }),
+    });
+  });
+
+  it('getOAuth42AuthorizationUrl inclui client_id, redirect_uri, response_type, scope e state', () => {
+    const url = service.getOAuth42AuthorizationUrl('xyz-state');
+    const parsed = new URL(url);
+
+    expect(parsed.origin + parsed.pathname).toBe(
+      'https://api.intra.42.fr/oauth/authorize',
+    );
+    expect(parsed.searchParams.get('client_id')).toBe('forty-two-client-id');
+    expect(parsed.searchParams.get('redirect_uri')).toBe(
+      'https://localhost:3000/api/auth/42/callback',
+    );
+    expect(parsed.searchParams.get('response_type')).toBe('code');
+    expect(parsed.searchParams.get('scope')).toBe('public');
+    expect(parsed.searchParams.get('state')).toBe('xyz-state');
+  });
+
+  it('getOAuth42AuthorizationUrl falha quando FORTY_TWO_CLIENT_ID nao esta definido', () => {
+    delete process.env.FORTY_TWO_CLIENT_ID;
+
+    expect(() => service.getOAuth42AuthorizationUrl('state')).toThrow(
+      '42 OAuth client id is not configured',
+    );
+  });
+
+  it('oauth42Callback usa fallbacks de nome e avatar quando o perfil tem campos minimos', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'tok' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 99,
+          email: 'minimal@example.com',
+          login: 'minimal_user',
+          // sem displayname, sem image
+        }),
+      }) as unknown as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue({
+      id: 'user-99',
+      email: 'minimal@example.com',
+      username: 'minimal_user',
+      fullName: 'minimal_user',
+      bio: null,
+      avatarUrl: null,
+      accountType: 'oauth_42',
+    });
+    prisma.authAccount.create.mockResolvedValue({});
+    prisma.session.create.mockResolvedValue({ id: 'session-99' });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await service.oauth42Callback('oauth-code');
+
+    expect(prisma.user.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        email: 'minimal@example.com',
+        fullName: 'minimal_user',
+        avatarUrl: null,
+        accountType: 'oauth_42',
+      }),
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import {
   CanActivate,
+  ConflictException,
   ExecutionContext,
   INestApplication,
   UnauthorizedException,
@@ -518,6 +519,183 @@ describe('Auth and Users HTTP flows (e2e)', () => {
         details: {
           field: 'password must be longer than or equal to 8 characters',
         },
+      });
+
+    expect(authService.signUp).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/refresh aceita refresh token via cookie e re-rotaciona cookies', async () => {
+    authService.refresh.mockResolvedValue({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .set('Cookie', ['refreshToken=cookie-refresh'])
+      .send({})
+      .expect(200);
+
+    expect(authService.refresh).toHaveBeenCalledWith({
+      refreshToken: 'cookie-refresh',
+    });
+    expect(response.body).toEqual({
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+    });
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('accessToken=new-access'),
+        expect.stringContaining('refreshToken=new-refresh'),
+      ]),
+    );
+  });
+
+  it('POST /api/auth/refresh sem token retorna 401 e limpa cookies', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/refresh')
+      .send({})
+      .expect(401);
+
+    expect(authService.refresh).not.toHaveBeenCalled();
+    expect(response.body).toEqual(
+      expect.objectContaining({ type: 'unauthorized' }),
+    );
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('accessToken=;'),
+        expect.stringContaining('refreshToken=;'),
+      ]),
+    );
+  });
+
+  it('POST /api/auth/logout sem refresh token retorna 204 e limpa cookies', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/logout')
+      .send({})
+      .expect(204);
+
+    expect(authService.logout).not.toHaveBeenCalled();
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('accessToken=;'),
+        expect.stringContaining('refreshToken=;'),
+      ]),
+    );
+  });
+
+  it('GET /api/auth/42/callback sem code redireciona com erro', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/42/callback')
+      .query({ state: 'expected-state' })
+      .set('Cookie', ['oauth42_state=expected-state'])
+      .expect(302);
+
+    expect(response.headers.location).toBe(
+      'http://localhost:5173/auth/callback?error=oauth_state',
+    );
+    expect(authService.oauth42Callback).not.toHaveBeenCalled();
+  });
+
+  it('GET /api/auth/42/callback sem cookie de state redireciona com erro', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/42/callback')
+      .query({ code: 'oauth-code', state: 'expected-state' })
+      .expect(302);
+
+    expect(response.headers.location).toBe(
+      'http://localhost:5173/auth/callback?error=oauth_state',
+    );
+    expect(authService.oauth42Callback).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/sign-up traduz ConflictException Email para email_taken', async () => {
+    authService.signUp.mockRejectedValue(
+      new ConflictException('Email is already taken'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send({
+        email: 'ana@example.com',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana.silva',
+      })
+      .expect(409)
+      .expect({
+        type: 'email_taken',
+        message: 'Email is already taken',
+        details: null,
+      });
+  });
+
+  it('POST /api/auth/sign-up traduz ConflictException Username para username_taken', async () => {
+    authService.signUp.mockRejectedValue(
+      new ConflictException('Username is already taken'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send({
+        email: 'ana@example.com',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana.silva',
+      })
+      .expect(409)
+      .expect({
+        type: 'username_taken',
+        message: 'Username is already taken',
+        details: null,
+      });
+  });
+
+  it('POST /api/auth/sign-in traduz UnauthorizedException para invalid_credentials', async () => {
+    authService.signIn.mockRejectedValue(
+      new UnauthorizedException('Invalid credentials'),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-in')
+      .send({ email: 'ana@example.com', password: 'WrongPass1' })
+      .expect(401)
+      .expect({
+        type: 'invalid_credentials',
+        message: 'Invalid credentials',
+        details: null,
+      });
+  });
+
+  it('POST /api/auth/sign-up rejeita username com caracteres invalidos', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send({
+        email: 'ana@example.com',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana silva!',
+      })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.type).toBe('validation_error');
+      });
+
+    expect(authService.signUp).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/auth/sign-up rejeita email malformado', async () => {
+    await request(app.getHttpServer())
+      .post('/api/auth/sign-up')
+      .send({
+        email: 'not-an-email',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana.silva',
+      })
+      .expect(400)
+      .expect((res) => {
+        expect(res.body.type).toBe('validation_error');
       });
 
     expect(authService.signUp).not.toHaveBeenCalled();
