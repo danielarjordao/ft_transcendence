@@ -32,6 +32,19 @@ const OAUTH42_STATE_COOKIE = 'oauth42_state';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  private shouldUseSecureCookies(): boolean {
+    if (process.env.HTTPS_ENABLED === 'true') {
+      return true;
+    }
+
+    const apiUrl = process.env.API_URL?.trim().toLowerCase();
+    if (apiUrl?.startsWith('https://')) {
+      return true;
+    }
+
+    return process.env.NODE_ENV === 'production';
+  }
+
   private getSessionContext(req: Request) {
     const userAgent = req.headers['user-agent'];
 
@@ -44,7 +57,7 @@ export class AuthController {
   private getCookieOptions(maxAge?: number): CookieOptions {
     return {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.shouldUseSecureCookies(),
       sameSite: 'lax',
       path: '/',
       ...(maxAge !== undefined ? { maxAge } : {}),

@@ -35,6 +35,25 @@ function resolveHttpsOptions() {
   };
 }
 
+function resolveCorsOrigins() {
+  const rawOrigins = process.env.FRONTEND_URL;
+
+  if (!rawOrigins) {
+    throw new Error('FRONTEND_URL is not configured');
+  }
+
+  const origins = rawOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  if (!origins.length) {
+    throw new Error('FRONTEND_URL is empty');
+  }
+
+  return origins.length === 1 ? origins[0] : origins;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     httpsOptions: resolveHttpsOptions(),
@@ -68,7 +87,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env.FRONTEND_URL || true,
+    origin: resolveCorsOrigins(),
     credentials: true,
   });
 

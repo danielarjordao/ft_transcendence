@@ -79,6 +79,10 @@ describe('Auth and Users HTTP flows (e2e)', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    process.env.NODE_ENV = 'test';
+    process.env.HTTPS_ENABLED = 'false';
+    process.env.API_URL = 'http://localhost:3000';
+    process.env.FRONTEND_URL = 'http://localhost:5173';
     authService.getFrontendAuthCallbackUrl.mockReturnValue(
       'http://localhost:5173/auth/callback',
     );
@@ -479,6 +483,41 @@ describe('Auth and Users HTTP flows (e2e)', () => {
         expect.stringContaining('accessToken=oauth-access-token'),
         expect.stringContaining('refreshToken=oauth-refresh-token'),
         expect.stringContaining('oauth42_state=;'),
+      ]),
+    );
+  });
+
+  it('GET /api/auth/42/callback com HTTPS habilitado marca cookies como Secure', async () => {
+    process.env.HTTPS_ENABLED = 'true';
+    process.env.API_URL = 'https://localhost:3000';
+
+    authService.oauth42Callback.mockResolvedValue({
+      accessToken: 'oauth-access-token',
+      refreshToken: 'oauth-refresh-token',
+      user: {
+        id: 'user-42',
+        email: 'oauth@example.com',
+      },
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/42/callback')
+      .query({
+        code: 'oauth-code',
+        state: 'expected-state',
+      })
+      .set('Cookie', ['oauth42_state=expected-state'])
+      .expect(302);
+
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('accessToken=oauth-access-token'),
+        expect.stringContaining('refreshToken=oauth-refresh-token'),
+      ]),
+    );
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Secure'),
       ]),
     );
   });
