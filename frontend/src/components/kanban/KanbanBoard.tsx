@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Navbar from '../layout/Navbar';
 import { ProfilePanel } from '../ProfilePanel';
 import { useParams, Link } from 'react-router-dom';
@@ -12,13 +12,14 @@ import { useWorkspaceStore } from '../../store/workspace.store';
 import ChatPanel from '../chat/ChatPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { totalUnread } from '../../constants/chat';
+import { workspacesService } from '../../services/workspaces.service';
+import { workspaceInvitationsService } from '../../services/workspace-invitations.service';
+import type { WorkspaceMember } from '../../types/workspace';
 
 const PRESET_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
   '#ff6b6b', '#E87D7D', '#9B8EC4', '#4ECDC4',
 ];
-
-const MOCK_MEMBERS = ['ana_laura', 'lucas_dev', 'daniela_be', 'murilo_db'];
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
 const MAX_SIZE_MB = 10;
@@ -35,12 +36,6 @@ interface AttachedFile {
   file: File;
   previewUrl: string | null;
   error: string | null;
-}
-
-interface Member {
-  id: string;
-  username: string;
-  role: 'Admin' | 'Member';
 }
 
 // ── file utils ────────────────────────────────────────────────────────────────
@@ -129,37 +124,79 @@ function AttachmentZone({ files, onAdd, onRemove }: {
 
 // ── members panel ─────────────────────────────────────────────────────────────
 
-function MembersPanel({ open, onClose, workspaceName }: {
+function MembersPanel({
+  open,
+  onClose,
+  workspaceName,
+  workspaceId,
+  members,
+  membersLoading,
+  membersError,
+  currentUserId,
+  onMembersChanged,
+}: {
   open: boolean;
   onClose: () => void;
   workspaceName: string;
+  workspaceId: string;
+  members: WorkspaceMember[];
+  membersLoading: boolean;
+  membersError: string | null;
+  currentUserId: string | undefined;
+  onMembersChanged: () => void;
 }) {
-  const [members, setMembers] = useState<Member[]>([
-    { id: 'm1', username: 'ana_laura',   role: 'Admin'  },
-    { id: 'm2', username: 'lucas_dev',   role: 'Member' },
-    { id: 'm3', username: 'daniela_be',  role: 'Member' },
-    { id: 'm4', username: 'murilo_db',   role: 'Member' },
-  ]);
-  const [addInput, setAddInput]     = useState('');
-  const [addError, setAddError]     = useState('');
-  const [addSuccess, setAddSuccess] = useState('');
+  const [emailInput, setEmailInput] = useState('');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
-  const handleAdd = () => {
-    const username = addInput.trim().toLowerCase();
-    if (!username) return;
-    if (members.some(m => m.username === username)) {
-      setAddError('This user is already a member.');
-      setAddSuccess('');
+  const currentMember = members.find(m => m.userId === currentUserId);
+  const canManage = currentMember?.role === 'admin' || currentMember?.role === 'owner';
+
+  const handleInvite = async () => {
+    const email = emailInput.trim().toLowerCase();
+    if (!email) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setInviteError('Enter a valid email address.');
+      setInviteSuccess('');
       return;
     }
-    setMembers(prev => [...prev, { id: `m${Date.now()}`, username, role: 'Member' }]);
-    setAddInput('');
-    setAddError('');
-    setAddSuccess(`@${username} added to workspace.`);
-    setTimeout(() => setAddSuccess(''), 3000);
+    setIsInviting(true);
+    setInviteError('');
+    setInviteSuccess('');
+    try {
+      await workspaceInvitationsService.inviteMember(workspaceId, { email, role: 'member' });
+      setEmailInput('');
+      setInviteSuccess(`Invitation sent to ${email}.`);
+      setTimeout(() => setInviteSuccess(''), 4000);
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { message?: string } } };
+      const status = e.response?.status;
+      if (status === 403) setInviteError('You need admin rights to invite members.');
+      else if (status === 409) setInviteError('This email is already a member or has a pending invite.');
+      else if (status === 404) setInviteError('Workspace not found.');
+      else setInviteError(e.response?.data?.message ?? 'Could not send invitation. Try again.');
+    } finally {
+      setIsInviting(false);
+    }
   };
 
-  const handleRemove = (id: string) => setMembers(prev => prev.filter(m => m.id !== id));
+  const handleRemove = async (memberId: string, username: string) => {
+    setRemovingId(memberId);
+    try {
+      await workspacesService.removeMember(workspaceId, memberId);
+      onMembersChanged();
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { message?: string } } };
+      const status = e.response?.status;
+      if (status === 403) setInviteError(`Could not remove @${username}: insufficient permissions.`);
+      else if (status === 404) setInviteError(`@${username} is no longer a member.`);
+      else setInviteError(e.response?.data?.message ?? `Could not remove @${username}. Try again.`);
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -183,36 +220,74 @@ function MembersPanel({ open, onClose, workspaceName }: {
             onMouseEnter={e => (e.currentTarget.style.color = '#CCC')}
             onMouseLeave={e => (e.currentTarget.style.color = '#555')}>✕</button>
         </div>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', flexShrink: 0 }}>
-          <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Add member</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={addInput} onChange={e => { setAddInput(e.target.value); setAddError(''); }} onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }} placeholder="Enter username..."
-              style={{ flex: 1, background: '#222222', border: `1px solid ${addError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '8px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
-            <button onClick={handleAdd} disabled={!addInput.trim()} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: addInput.trim() ? '#7B68EE' : '#2A2A2A', color: addInput.trim() ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: addInput.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}>Add</button>
-          </div>
-          {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{addError}</p>}
-          {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 6 }}>{addSuccess}</p>}
-        </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
-          {members.map(m => (
-            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #222222' }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ color: '#CCCCCC', fontSize: 13, fontWeight: 700 }}>{m.username.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2)}</span>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 500 }}>@{m.username}</p>
-                <span style={{ fontSize: 10, fontWeight: 600, color: m.role === 'Admin' ? '#7B68EE' : '#555', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.role}</span>
-              </div>
-              {m.role !== 'Admin' && (
-                <button onClick={() => handleRemove(m.id)} style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', cursor: 'pointer', fontSize: 12, padding: '4px 10px', fontFamily: 'inherit' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; }}>Remove</button>
-              )}
+
+        {canManage && (
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', flexShrink: 0 }}>
+            <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Invite by email</p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={e => { setEmailInput(e.target.value); setInviteError(''); }}
+                onKeyDown={e => { if (e.key === 'Enter' && !isInviting) handleInvite(); }}
+                placeholder="user@example.com"
+                disabled={isInviting}
+                style={{ flex: 1, background: '#222222', border: `1px solid ${inviteError ? '#FF6B6B' : '#3A3A3A'}`, borderRadius: 8, padding: '8px 12px', color: '#EEEEEE', fontSize: 13, fontFamily: 'inherit', outline: 'none', opacity: isInviting ? 0.6 : 1 }} />
+              <button
+                onClick={handleInvite}
+                disabled={!emailInput.trim() || isInviting}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: emailInput.trim() && !isInviting ? '#7B68EE' : '#2A2A2A', color: emailInput.trim() && !isInviting ? '#fff' : '#555', fontSize: 13, fontWeight: 600, cursor: emailInput.trim() && !isInviting ? 'pointer' : 'not-allowed', flexShrink: 0, fontFamily: 'inherit' }}>
+                {isInviting ? '...' : 'Invite'}
+              </button>
             </div>
-          ))}
-        </div>
-        <div style={{ padding: '14px 20px', borderTop: '1px solid #2A2A2A', flexShrink: 0 }}>
-          <p style={{ color: '#444', fontSize: 11, textAlign: 'center' }}>TODO: conectar a GET /api/workspaces/:id/members</p>
+            {inviteError && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 6 }}>{inviteError}</p>}
+            {inviteSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 6 }}>{inviteSuccess}</p>}
+          </div>
+        )}
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {membersLoading && (
+            <p style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>Loading members...</p>
+          )}
+          {membersError && !membersLoading && (
+            <p style={{ color: '#FF6B6B', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>{membersError}</p>
+          )}
+          {!membersLoading && !membersError && members.length === 0 && (
+            <p style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>No members yet.</p>
+          )}
+          {!membersLoading && !membersError && members.map(m => {
+            const isSelf = m.userId === currentUserId;
+            const isOwner = m.role === 'owner';
+            const showRemove = canManage && !isSelf && !isOwner;
+            const initials = (m.fullName || m.username).split(/[\s_]/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+            const roleColor = m.role === 'owner' ? '#FFA500' : m.role === 'admin' ? '#7B68EE' : '#555';
+            return (
+              <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #222222' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+                  <span style={{ color: '#CCCCCC', fontSize: 13, fontWeight: 700 }}>{initials}</span>
+                  {m.status === 'online' && (
+                    <span style={{ position: 'absolute', bottom: 0, right: 0, width: 10, height: 10, borderRadius: '50%', background: '#50C878', border: '2px solid #1A1A1A' }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 500 }}>
+                    {m.fullName || `@${m.username}`}{isSelf && <span style={{ color: '#555', fontSize: 11, marginLeft: 6 }}>(you)</span>}
+                  </p>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: roleColor, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{m.role}</span>
+                </div>
+                {showRemove && (
+                  <button
+                    onClick={() => handleRemove(m.userId, m.username)}
+                    disabled={removingId === m.userId}
+                    style={{ background: 'transparent', border: '1px solid #2A2A2A', borderRadius: 6, color: '#555', cursor: removingId === m.userId ? 'wait' : 'pointer', fontSize: 12, padding: '4px 10px', fontFamily: 'inherit', opacity: removingId === m.userId ? 0.5 : 1 }}
+                    onMouseEnter={e => { if (removingId !== m.userId) { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; } }}
+                    onMouseLeave={e => { if (removingId !== m.userId) { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; } }}>
+                    {removingId === m.userId ? '...' : 'Remove'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </>
@@ -221,9 +296,10 @@ function MembersPanel({ open, onClose, workspaceName }: {
 
 // ── filter panel ─────────────────────────────────────────────────────────────
 
-function FilterPanel({ filters, subjects, onApply, onClose }: {
+function FilterPanel({ filters, subjects, members, onApply, onClose }: {
   filters: Filters;
   subjects: Subject[];
+  members: WorkspaceMember[];
   onApply: (f: Filters) => void;
   onClose: () => void;
 }) {
@@ -263,13 +339,16 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
           <div>
             <p style={{ color: '#888', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Assignee</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {MOCK_MEMBERS.map(m => (
-                <button key={m} onClick={() => toggle('assignee', m)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${local.assignee.includes(m) ? '#7B68EE' : '#2A2A2A'}`, background: local.assignee.includes(m) ? '#7B68EE22' : 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+              {members.length === 0 && (
+                <p style={{ color: '#555', fontSize: 12 }}>No members available.</p>
+              )}
+              {members.map(m => (
+                <button key={m.userId} onClick={() => toggle('assignee', m.username)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, border: `1px solid ${local.assignee.includes(m.username) ? '#7B68EE' : '#2A2A2A'}`, background: local.assignee.includes(m.username) ? '#7B68EE22' : 'transparent', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                   <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <span style={{ color: '#CCC', fontSize: 9, fontWeight: 700 }}>{m[0].toUpperCase()}</span>
+                    <span style={{ color: '#CCC', fontSize: 9, fontWeight: 700 }}>{m.username[0].toUpperCase()}</span>
                   </div>
-                  <span style={{ color: local.assignee.includes(m) ? '#F5F5F5' : '#888', fontSize: 13 }}>{m}</span>
-                  {local.assignee.includes(m) && <span style={{ marginLeft: 'auto', color: '#7B68EE', fontSize: 14 }}>✓</span>}
+                  <span style={{ color: local.assignee.includes(m.username) ? '#F5F5F5' : '#888', fontSize: 13 }}>{m.username}</span>
+                  {local.assignee.includes(m.username) && <span style={{ marginLeft: 'auto', color: '#7B68EE', fontSize: 14 }}>✓</span>}
                 </button>
               ))}
             </div>
@@ -302,9 +381,10 @@ function FilterPanel({ filters, subjects, onApply, onClose }: {
 
 // ── task detail modal ────────────────────────────────────────────────────────
 
-function TaskDetailModal({ task, subjects, onClose, onUpdate, onDelete }: {
+function TaskDetailModal({ task, subjects, members, onClose, onUpdate, onDelete }: {
   task: Task;
   subjects: Subject[];
+  members: WorkspaceMember[];
   onClose: () => void;
   onUpdate: (t: Task) => void;
   onDelete: (id: string) => void;
@@ -460,7 +540,7 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate, onDelete }: {
               <label style={labelStyle}>ASSIGNEE</label>
               <select value={draftAssignee} onChange={e => setDraftAssignee(e.target.value)} style={fieldStyle}>
                 <option value="">Unassigned</option>
-                {MOCK_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+                {members.map(m => <option key={m.userId} value={m.username}>{m.username}</option>)}
               </select>
             </div>
             <div>
@@ -544,10 +624,11 @@ function TaskDetailModal({ task, subjects, onClose, onUpdate, onDelete }: {
 
 // ── create task modal ────────────────────────────────────────────────────────
 
-function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }: {
+function CreateTaskModal({ initialStatus, subjects, fields, members, onClose, onCreate }: {
   initialStatus: string;
   subjects: Subject[];
   fields: { id: string; label: string; color: string }[];
+  members: WorkspaceMember[];
   onClose: () => void;
   onCreate: (task: Task) => void;
 }) {
@@ -601,7 +682,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, onClose, onCreate }:
             <label style={labelStyle}>ASSIGNEE</label>
             <select value={assignee} onChange={e => setAssignee(e.target.value)} style={selectStyle}>
               <option value="">Unassigned</option>
-              {MOCK_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+              {members.map(m => <option key={m.userId} value={m.username}>{m.username}</option>)}
             </select>
           </div>
         </div>
@@ -762,6 +843,34 @@ export default function KanbanBoard() {
   const [membersOpen, setMembersOpen]       = useState(false);
   const [filters, setFilters]               = useState<Filters>({ priority: [], assignee: [], subjectId: [] });
 
+  // Real workspace members from API (replaces MOCK_MEMBERS)
+  // Source of truth: API.md 3.6 (GET /workspaces/:wsId/members)
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [membersError, setMembersError] = useState<string | null>(null);
+
+  const fetchMembers = useCallback(async (wsId: string) => {
+    setMembersLoading(true);
+    setMembersError(null);
+    try {
+      const data = await workspacesService.listMembers(wsId);
+      setMembers(data);
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number } };
+      const status = e.response?.status;
+      if (status === 404) setMembersError('Workspace not found or access denied.');
+      else setMembersError('Could not load members. Try again.');
+      setMembers([]);
+    } finally {
+      setMembersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    fetchMembers(workspaceId);
+  }, [workspaceId, fetchMembers]);
+
   useEffect(() => {
     if (!workspaceId) return;
     updateBoard(workspaceId, { tasks, subjects, fields });
@@ -824,7 +933,7 @@ export default function KanbanBoard() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                 Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
               </button>
-              {filterOpen && <FilterPanel filters={filters} subjects={subjects} onApply={setFilters} onClose={() => setFilterOpen(false)} />}
+              {filterOpen && <FilterPanel filters={filters} subjects={subjects} members={members} onApply={setFilters} onClose={() => setFilterOpen(false)} />}
             </div>
 
             {/* sort */}
@@ -924,13 +1033,23 @@ export default function KanbanBoard() {
 
         {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />}
         {showAddField   && <AddFieldModal   onClose={() => setShowAddField(false)}   onCreate={field   => { setFields(prev => [...prev, field]);     setShowAddField(false);   }} />}
-        {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} onDelete={handleDelete} />}
-        {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
+        {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} members={members} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} onDelete={handleDelete} />}
+        {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} members={members} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
       </div>
 
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ChatPanel isOpen={chatOpen} onClose={() => setChatOpen(false)} currentUserId={user?.id || '1'} />
-      <MembersPanel open={membersOpen} onClose={() => setMembersOpen(false)} workspaceName={workspace?.name ?? 'Workspace'} />
+      <MembersPanel
+        open={membersOpen}
+        onClose={() => setMembersOpen(false)}
+        workspaceName={workspace?.name ?? 'Workspace'}
+        workspaceId={workspaceId ?? ''}
+        members={members}
+        membersLoading={membersLoading}
+        membersError={membersError}
+        currentUserId={user?.id}
+        onMembersChanged={() => { if (workspaceId) fetchMembers(workspaceId); }}
+      />
     </>
   );
 }
