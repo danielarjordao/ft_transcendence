@@ -58,7 +58,6 @@ model User {
   accountType                  String                @default("standard")
   preferences                  Json                  @default("{}")
   isOnline                     Boolean               @default(false)
-  emailVerifiedAt              DateTime?
   passwordChangedAt            DateTime?
   lastLoginAt                  DateTime?
   twoFactorEnabled             Boolean               @default(false)
@@ -87,7 +86,6 @@ model User {
   notifications                Notification[]
 
   @@index([isOnline])
-  @@index([emailVerifiedAt])
 }
 
 model FriendRequest {

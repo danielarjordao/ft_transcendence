@@ -19,9 +19,8 @@ Campos principais:
 - `accountType`: campo mantido por compatibilidade com o contrato atual do projeto
 - `preferences`: configuracoes do usuario em JSON
 - `isOnline`: estado de presenca
-- `emailVerifiedAt`: momento em que o email foi confirmado
 - `passwordChangedAt`: ultimo momento em que a senha foi alterada
-- `lastLoginAt`: ultimo login bem-sucedido
+- `lastLoginAt`: ultimo login bem-sucedido, hoje mantido mais para auditoria
 - `twoFactorEnabled`: indica se o 2FA esta ativo
 - `twoFactorSecretEnc`: segredo do autenticador usado no 2FA
 - `twoFactorConfirmedAt`: momento em que o 2FA foi confirmado pela primeira vez
