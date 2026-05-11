@@ -19,9 +19,8 @@ Campos principais:
 - `accountType`: campo mantido por compatibilidade com o contrato atual do projeto
 - `preferences`: configuracoes do usuario em JSON
 - `isOnline`: estado de presenca
-- `emailVerifiedAt`: momento em que o email foi confirmado
 - `passwordChangedAt`: ultimo momento em que a senha foi alterada
-- `lastLoginAt`: ultimo login bem-sucedido
+- `lastLoginAt`: ultimo login bem-sucedido, hoje mantido mais para auditoria
 - `twoFactorEnabled`: indica se o 2FA esta ativo
 - `twoFactorSecretEnc`: segredo do autenticador usado no 2FA
 - `twoFactorConfirmedAt`: momento em que o 2FA foi confirmado pela primeira vez
@@ -103,7 +102,8 @@ Pontos importantes:
 - o banco guarda `refreshTokenHash`, nao o refresh token puro
 - isso permite multiplas sessoes por usuario, por exemplo em navegadores ou dispositivos diferentes
 - `replacedBySessionId` ajuda no fluxo de rotacao de refresh token
-- `status`, `revokedAt` e `expiresAt` ajudam a controlar logout, expiracao e invalidacao
+- `status` e `revokedAt` ajudam a controlar revogacao e logout
+- a expiracao natural da sessao e derivada de `expiresAt`, sem precisar persistir um status `EXPIRED`
 
 ### 4. PasswordResetToken
 
@@ -1095,5 +1095,4 @@ Mudancas necessarias:
 - se o time mantiver o formato simples, o DTO atual fica mais proximo do schema
 - se o time adotar o formato rico, o DTO precisara incluir `title`, `message` e possivelmente `resource`
 - normalizar o service atual, porque o mock usa `read` e `message`, enquanto o schema usa `isRead` e tambem suporta `content`
-
 
