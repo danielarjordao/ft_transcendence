@@ -33,7 +33,6 @@ enum AuthProvider {
 enum SessionStatus {
   ACTIVE
   REVOKED
-  EXPIRED
 }
 
 enum NotificationType {

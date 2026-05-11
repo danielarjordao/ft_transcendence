@@ -103,7 +103,8 @@ Pontos importantes:
 - o banco guarda `refreshTokenHash`, nao o refresh token puro
 - isso permite multiplas sessoes por usuario, por exemplo em navegadores ou dispositivos diferentes
 - `replacedBySessionId` ajuda no fluxo de rotacao de refresh token
-- `status`, `revokedAt` e `expiresAt` ajudam a controlar logout, expiracao e invalidacao
+- `status` e `revokedAt` ajudam a controlar revogacao e logout
+- a expiracao natural da sessao e derivada de `expiresAt`, sem precisar persistir um status `EXPIRED`
 
 ### 4. PasswordResetToken
 
@@ -1095,5 +1096,4 @@ Mudancas necessarias:
 - se o time mantiver o formato simples, o DTO atual fica mais proximo do schema
 - se o time adotar o formato rico, o DTO precisara incluir `title`, `message` e possivelmente `resource`
 - normalizar o service atual, porque o mock usa `read` e `message`, enquanto o schema usa `isRead` e tambem suporta `content`
-
 
