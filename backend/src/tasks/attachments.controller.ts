@@ -15,6 +15,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  Redirect,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import type { RequestWithUser } from 'src/common/guards/interfaces/active-user.interface';
@@ -67,12 +68,21 @@ export class AttachmentsController {
   }
 
   @Get('attachments/:attachmentId')
-  getById(
+  @Redirect()
+  async getById(
     @Req() req: RequestWithUser,
     @Param('attachmentId') attachmentId: string,
   ) {
     const userId = this.getUserId(req);
-    return this.attachmentsService.getById(userId, attachmentId);
+    const url = await this.attachmentsService.getPreviewUrl(
+      userId,
+      attachmentId,
+    );
+
+    return {
+      url,
+      statusCode: HttpStatus.FOUND,
+    };
   }
 
   @Delete('attachments/:attachmentId')
