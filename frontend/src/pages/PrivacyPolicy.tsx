@@ -36,7 +36,7 @@ export default function PrivacyPolicy() {
           },
           {
             title: '4. Cookies and Local Storage',
-            body: 'Fazelo uses browser localStorage to persist your authentication token across sessions. No third-party tracking cookies are used. You can clear this data at any time through your browser settings.',
+            body: 'Fazelo may use both browser localStorage and first-party httpOnly cookies to support authentication flows and session continuity. No third-party tracking cookies are used. You can clear locally stored browser data at any time through your browser settings.',
           },
           {
             title: '5. File Uploads',

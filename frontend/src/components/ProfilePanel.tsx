@@ -422,7 +422,9 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
         {/* Sign out */}
         <div style={{ padding: '16px 24px', borderTop: `1px solid ${T.border}`, flexShrink: 0 }}>
           <button
-            onClick={logout}
+            onClick={() => {
+              void logout();
+            }}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, padding: '11px 0', borderRadius: 8, border: `1px solid ${T.borderLight}`, background: 'transparent', color: T.danger, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
             onMouseEnter={e => e.currentTarget.style.background = '#2A1010'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}

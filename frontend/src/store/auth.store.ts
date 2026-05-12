@@ -8,10 +8,36 @@ interface AuthState {
   isLoading: boolean;
   ready: boolean;
   setUser: (user: User | null) => void;
-  setToken: (token: string | null) => void;
+  setTokens: (accessToken: string | null, refreshToken: string | null) => void;
   setLoading: (loading: boolean) => void;
   login: (accessToken: string, refreshToken: string, user: User) => void;
   logout: () => void;
+}
+
+function persistUser(user: User | null) {
+  if (user) {
+    localStorage.setItem('fazelo-user', JSON.stringify(user));
+    return;
+  }
+
+  localStorage.removeItem('fazelo-user');
+}
+
+function persistTokens(
+  accessToken: string | null,
+  refreshToken: string | null,
+) {
+  if (accessToken) {
+    localStorage.setItem('accessToken', accessToken);
+  } else {
+    localStorage.removeItem('accessToken');
+  }
+
+  if (refreshToken) {
+    localStorage.setItem('refreshToken', refreshToken);
+  } else {
+    localStorage.removeItem('refreshToken');
+  }
 }
 
 function getInitialState() {
@@ -27,21 +53,25 @@ export const useAuthStore = create<AuthState>()((set) => ({
   isLoading: false,
   ready: true,
 
-  setUser:    (user)    => set({ user }),
-  setToken:   (token)   => set({ accessToken: token }),
+  setUser: (user) => {
+    persistUser(user);
+    set({ user });
+  },
+  setTokens: (accessToken, refreshToken) => {
+    persistTokens(accessToken, refreshToken);
+    set({ accessToken, refreshToken });
+  },
   setLoading: (isLoading) => set({ isLoading }),
 
   login: (accessToken, refreshToken, user) => {
-    localStorage.setItem('accessToken',  accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
-    localStorage.setItem('fazelo-user',  JSON.stringify(user));
+    persistTokens(accessToken, refreshToken);
+    persistUser(user);
     set({ accessToken, refreshToken, user });
   },
 
   logout: () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('fazelo-user');
+    persistTokens(null, null);
+    persistUser(null);
     set({ accessToken: null, refreshToken: null, user: null });
   },
 }));

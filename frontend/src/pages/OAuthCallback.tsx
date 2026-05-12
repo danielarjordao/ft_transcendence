@@ -7,18 +7,45 @@ export default function OAuthCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { login } = useAuth();
+  const oauthError = params.get('error');
 
   useEffect(() => {
-    const token = params.get('token');
-    if (!token) { navigate('/login'); return; }
+    if (oauthError) {
+      sessionStorage.removeItem('postAuthRedirect');
+      navigate('/login', { replace: true });
+      return;
+    }
+
     const postAuthRedirect =
       sessionStorage.getItem('postAuthRedirect') || '/dashboard';
     sessionStorage.removeItem('postAuthRedirect');
-    authService.getMe().then((user) => {
-      login(token, '', user);
-      navigate(postAuthRedirect, { replace: true });
-    }).catch(() => navigate('/login'));
-  }, []);
+
+    let isActive = true;
+
+    const finalizeOAuthSession = async () => {
+      try {
+        const tokens = await authService.refresh();
+        const user = await authService.getMe();
+
+        if (!isActive) {
+          return;
+        }
+
+        login(tokens.accessToken, tokens.refreshToken, user);
+        navigate(postAuthRedirect, { replace: true });
+      } catch {
+        if (isActive) {
+          navigate('/login', { replace: true });
+        }
+      }
+    };
+
+    void finalizeOAuthSession();
+
+    return () => {
+      isActive = false;
+    };
+  }, [login, navigate, oauthError]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>

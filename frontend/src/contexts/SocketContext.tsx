@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import socketService from '../services/socket.service';
+import { useAuthStore } from '../store/auth.store';
 
 interface SocketContextValue {
   isConnected: boolean;
@@ -13,25 +14,18 @@ const SocketContext = createContext<SocketContextValue | undefined>(undefined);
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const accessToken = useAuthStore((state) => state.accessToken);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !accessToken) {
       socketService.disconnect();
       setIsConnected(false);
       return;
     }
 
-    // Pegar token do localStorage (chave: 'accessToken')
-    const token = localStorage.getItem('accessToken');
-
-    if (!token) {
-      console.warn('⚠️ Socket: Token not found in localStorage');
-      return;
-    }
-
     console.log('🔌 Socket: Connecting with token...');
-    socketService.connect(token);
+    socketService.connect(accessToken);
 
     // Listeners para atualizar estado de conexão
     const handleConnect = () => {
@@ -58,8 +52,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       socketService.off('connect' as any, handleConnect);
       socketService.off('disconnect' as any, handleDisconnect);
       socketService.off('connect_error' as any, handleConnectError);
+      socketService.disconnect();
     };
-  }, [user]);
+  }, [accessToken, user]);
 
   const joinRoom = useCallback((workspaceId: string) => {
     socketService.joinRoom(workspaceId);
