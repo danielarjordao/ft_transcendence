@@ -2,6 +2,20 @@ import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/auth.service';
+import type { TokenPairResponse } from '../types/auth';
+
+// Module-level promise deduplication: both StrictMode mounts share the same
+// in-flight request, so only one POST /auth/refresh is ever sent.
+let pendingRefresh: Promise<TokenPairResponse> | null = null;
+
+function deduplicatedRefresh() {
+  if (!pendingRefresh) {
+    pendingRefresh = authService.refresh().finally(() => {
+      pendingRefresh = null;
+    });
+  }
+  return pendingRefresh;
+}
 
 export default function OAuthCallback() {
   const [params] = useSearchParams();
@@ -24,7 +38,7 @@ export default function OAuthCallback() {
 
     const finalizeOAuthSession = async () => {
       try {
-        const tokens = await authService.refresh();
+        const tokens = await deduplicatedRefresh();
         const user = await authService.getMe();
 
         if (!isActive) {
