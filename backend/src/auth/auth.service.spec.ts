@@ -171,7 +171,7 @@ describe('AuthService', () => {
 
   it('signup nao permite email ou username duplicado', async () => {
     prisma.user.findUnique
-      .mockResolvedValueOnce({ id: 'existing-user' })
+      .mockResolvedValueOnce({ id: 'existing-user', authAccounts: [{ id: 'local-auth' }] })
       .mockResolvedValueOnce(null);
 
     await expect(
@@ -182,6 +182,85 @@ describe('AuthService', () => {
         username: 'ana.silva',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('signup vincula auth LOCAL a usuario existente criado via OAuth quando o email coincide', async () => {
+    prisma.user.findUnique
+      .mockResolvedValueOnce({
+        id: 'user-oauth',
+        email: 'ana@example.com',
+        username: 'ana42',
+        fullName: 'Ana OAuth',
+        bio: null,
+        avatarUrl: 'https://cdn.example.com/avatar.png',
+        accountType: 'oauth_42',
+        authAccounts: [],
+      })
+      .mockResolvedValueOnce(null);
+    prisma.authAccount.create.mockResolvedValue({
+      id: 'auth-local',
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-oauth',
+      email: 'ana@example.com',
+      username: 'ana42',
+      fullName: 'Ana OAuth',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/avatar.png',
+      accountType: 'oauth_42',
+    });
+    (jwtService.signAsync as jest.Mock)
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+    prisma.session.create.mockResolvedValue({ id: 'session-1' });
+
+    const result = await service.signUp(
+      {
+        email: 'ana@example.com',
+        password: 'Senha123',
+        fullName: 'Ana Silva',
+        username: 'ana.silva',
+      },
+      {
+        userAgent: 'jest',
+        ipAddress: '127.0.0.1',
+      },
+    );
+
+    expect(prisma.user.create).not.toHaveBeenCalled();
+    expect(prisma.authAccount.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'user-oauth',
+        provider: AUTH_PROVIDER.LOCAL,
+        providerAccountId: 'ana@example.com',
+      }),
+    });
+    const passwordHash =
+      prisma.authAccount.create.mock.calls[0][0].data.passwordHash;
+    expect(passwordHash).not.toBe('Senha123');
+    await expect(bcrypt.compare('Senha123', passwordHash)).resolves.toBe(true);
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-oauth' },
+      data: {
+        fullName: 'Ana OAuth',
+        lastLoginAt: expect.any(Date),
+      },
+    });
+
+    expect(result).toEqual({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      user: {
+        id: 'user-oauth',
+        email: 'ana@example.com',
+        fullName: 'Ana OAuth',
+        username: 'ana42',
+        bio: '',
+        avatarUrl: 'https://cdn.example.com/avatar.png',
+        accountType: 'oauth_42',
+      },
+    });
   });
 
   it('signin rejeita senha errada', async () => {
@@ -828,15 +907,17 @@ describe('AuthService', () => {
       user: {
         id: 'user-42',
         email: 'oauth@example.com',
+        fullName: 'Ana Local',
+        avatarUrl: 'https://cdn.example.com/local-avatar.png',
       },
     });
     prisma.user.update.mockResolvedValue({
       id: 'user-42',
       email: 'oauth@example.com',
       username: 'oauth_user',
-      fullName: 'OAuth User',
+      fullName: 'Ana Local',
       bio: null,
-      avatarUrl: 'https://cdn.example.com/avatar.png',
+      avatarUrl: 'https://cdn.example.com/local-avatar.png',
       accountType: 'oauth_42',
     });
     prisma.authAccount.update.mockResolvedValue({});
@@ -854,7 +935,12 @@ describe('AuthService', () => {
     expect(prisma.authAccount.create).not.toHaveBeenCalled();
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'user-42' },
-      data: expect.objectContaining({ accountType: 'oauth_42' }),
+      data: {
+        fullName: 'Ana Local',
+        avatarUrl: 'https://cdn.example.com/local-avatar.png',
+        accountType: 'oauth_42',
+        lastLoginAt: expect.any(Date),
+      },
     });
     expect(prisma.authAccount.update).toHaveBeenCalled();
   });

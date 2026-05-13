@@ -415,8 +415,8 @@ export class AuthService {
       const updatedUser = await this.prisma.user.update({
         where: { id: existingAuthAccount.user.id },
         data: {
-          fullName,
-          avatarUrl,
+          fullName: existingAuthAccount.user.fullName || fullName,
+          avatarUrl: existingAuthAccount.user.avatarUrl || avatarUrl,
           accountType: 'oauth_42',
           lastLoginAt: new Date(),
         },
@@ -508,7 +508,19 @@ export class AuthService {
     const [existingEmailUser, existingUsernameUser] = await Promise.all([
       this.prisma.user.findUnique({
         where: { email: dto.email },
-        select: { id: true },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          fullName: true,
+          bio: true,
+          avatarUrl: true,
+          accountType: true,
+          authAccounts: {
+            where: { provider: AuthProvider.LOCAL },
+            select: { id: true },
+          },
+        },
       }),
       this.prisma.user.findUnique({
         where: { username: dto.username },
@@ -516,15 +528,42 @@ export class AuthService {
       }),
     ]);
 
-    if (existingEmailUser) {
+    if (existingEmailUser?.authAccounts?.length) {
       throw new ConflictException('Email is already taken');
     }
 
-    if (existingUsernameUser) {
+    if (existingUsernameUser && existingUsernameUser.id !== existingEmailUser?.id) {
       throw new ConflictException('Username is already taken');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    if (existingEmailUser) {
+      await this.prisma.authAccount.create({
+        data: {
+          userId: existingEmailUser.id,
+          provider: AuthProvider.LOCAL,
+          providerAccountId: dto.email,
+          passwordHash: hashedPassword,
+        },
+      });
+
+      const linkedUser = await this.prisma.user.update({
+        where: { id: existingEmailUser.id },
+        data: {
+          fullName: existingEmailUser.fullName || dto.fullName,
+          lastLoginAt: new Date(),
+        },
+      });
+
+      const tokens = await this.generateTokens(linkedUser.id, linkedUser.email);
+      await this.createSession(linkedUser.id, tokens.refreshToken, context);
+
+      return {
+        ...tokens,
+        user: this.serializeUser(linkedUser),
+      };
+    }
 
     const newUser = await this.prisma.user.create({
       data: {
