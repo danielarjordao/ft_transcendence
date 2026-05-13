@@ -1,10 +1,12 @@
 import axios from 'axios';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { User } from '../types/auth';
 import { AvatarUpload } from './AvatarUpload';
 import { useAuth } from '../contexts/AuthContext';
 import { useAuthStore } from '../store/auth.store';
 import { usersService } from '../services/users.service';
+import { accountService } from '../services/account.service';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -39,6 +41,16 @@ interface FormErrors {
   fullName?: string;
   username?: string;
   bio?: string;
+}
+interface PasswordForm {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+interface PasswordErrors {
+  currentPassword?: string;
+  newPassword?: string;
+  confirmPassword?: string;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -179,6 +191,75 @@ function Field({
   );
 }
 
+function PasswordField({
+  label,
+  value,
+  onChange,
+  error,
+  onKeyDown,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  hint?: string;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label
+        style={{
+          display: 'block',
+          color: T.dim,
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          marginBottom: 5,
+        }}
+      >
+        {label}
+      </label>
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        style={{
+          width: '100%',
+          background: T.inputBg,
+          border: `1px solid ${error ? T.danger : T.borderLight}`,
+          borderRadius: 7,
+          padding: '9px 11px',
+          color: T.bright,
+          fontSize: 13,
+          outline: 'none',
+          boxSizing: 'border-box',
+        }}
+      />
+      {hint && !error && (
+        <p style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>{hint}</p>
+      )}
+      {error && (
+        <p
+          style={{
+            color: T.danger,
+            fontSize: 11,
+            marginTop: 4,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <IconAlert />
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Profile View ──────────────────────────────────────────────────────────────
 function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
   const joined = new Date(user.createdAt ?? Date.now()).toLocaleDateString('en-US', {
@@ -312,14 +393,206 @@ function ProfileEdit({ user, onCancel, onSave }: {
 
 // ── Security Tab ──────────────────────────────────────────────────────────────
 function SecurityTab() {
+  const { logout } = useAuth();
+  const redirectTimeoutRef = useRef<number | null>(null);
+  const [form, setForm] = useState<PasswordForm>({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [errors, setErrors] = useState<PasswordErrors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const setField = (key: keyof PasswordForm) => (value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setServerError(null);
+    setSuccessMessage(null);
+  };
+
+  function validate(): PasswordErrors {
+    const nextErrors: PasswordErrors = {};
+
+    if (!form.currentPassword.trim()) {
+      nextErrors.currentPassword = 'Current password is required.';
+    }
+
+    if (!form.newPassword) {
+      nextErrors.newPassword = 'New password is required.';
+    } else if (form.newPassword.length < 8) {
+      nextErrors.newPassword = 'Minimum 8 characters.';
+    } else if (!/(?=.*[A-Za-z])(?=.*\d).+/.test(form.newPassword)) {
+      nextErrors.newPassword =
+        'Password must contain at least one letter and one number.';
+    } else if (form.newPassword === form.currentPassword) {
+      nextErrors.newPassword =
+        'New password must be different from the current one.';
+    }
+
+    if (!form.confirmPassword) {
+      nextErrors.confirmPassword = 'Please confirm your new password.';
+    } else if (form.confirmPassword !== form.newPassword) {
+      nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    return nextErrors;
+  }
+
+  const handleSubmit = async () => {
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setIsSaving(true);
+    setServerError(null);
+    setSuccessMessage(null);
+
+    try {
+      await accountService.changePassword({
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+      setForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setSuccessMessage('Password updated. Please sign in again.');
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        void logout().finally(() => {
+          window.location.href = '/login';
+        });
+      }, 1200);
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      if (apiMessage === 'Invalid current password') {
+        setErrors((prev) => ({
+          ...prev,
+          currentPassword: 'Current password is incorrect.',
+        }));
+      } else {
+        setServerError(apiMessage || 'Could not update password right now.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isPasswordFormFilled = Boolean(
+    form.currentPassword.trim() &&
+      form.newPassword.trim() &&
+      form.confirmPassword.trim(),
+  );
+
   return (
     <div>
       <SectionLabel>Password</SectionLabel>
-      <p style={{ color: T.dim, fontSize: 12, marginTop: 8, marginBottom: 16, lineHeight: 1.6 }}>
-        Password change will be available after backend integration.
+      <p
+        style={{
+          color: T.dim,
+          fontSize: 12,
+          marginTop: 8,
+          marginBottom: 16,
+          lineHeight: 1.6,
+        }}
+      >
+        Update your local password here. Accounts that only use OAuth will be
+        rejected by the backend.
       </p>
-      <button disabled style={{ padding: '8px 16px', borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}>
-        Update Password
+      {serverError && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#2A1010',
+            border: '1px solid #FF4D4D40',
+            borderRadius: 7,
+            padding: '9px 12px',
+            marginBottom: 16,
+            color: T.danger,
+            fontSize: 12,
+          }}
+        >
+          <IconAlert />
+          {serverError}
+        </div>
+      )}
+      {successMessage && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#102418',
+            border: '1px solid #4BBE7D44',
+            borderRadius: 7,
+            padding: '9px 12px',
+            marginBottom: 16,
+            color: '#9CE3B8',
+            fontSize: 12,
+          }}
+        >
+          <IconCheck />
+          {successMessage}
+        </div>
+      )}
+      <PasswordField
+        label="Current Password"
+        value={form.currentPassword}
+        onChange={setField('currentPassword')}
+        error={errors.currentPassword}
+      />
+      <PasswordField
+        label="New Password"
+        value={form.newPassword}
+        onChange={setField('newPassword')}
+        error={errors.newPassword}
+        hint="At least 8 characters, with one letter and one number."
+      />
+      <PasswordField
+        label="Confirm New Password"
+        value={form.confirmPassword}
+        onChange={setField('confirmPassword')}
+        error={errors.confirmPassword}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            void handleSubmit();
+          }
+        }}
+      />
+      <button
+        onClick={() => void handleSubmit()}
+        disabled={!isPasswordFormFilled || isSaving}
+        style={{
+          padding: '8px 16px',
+          borderRadius: 7,
+          border: 'none',
+          background: isPasswordFormFilled && !isSaving ? T.primary : T.border,
+          color: isPasswordFormFilled && !isSaving ? T.primaryText : T.dim,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: isPasswordFormFilled && !isSaving ? 'pointer' : 'not-allowed',
+        }}
+      >
+        {isSaving ? 'Updating...' : 'Update Password'}
       </button>
       <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 24, paddingTop: 20 }}>
         <p style={{ color: T.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Two-Factor Authentication</p>

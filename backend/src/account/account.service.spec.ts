@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as QRCode from 'qrcode';
+import { SessionStatus } from '../generated/prisma/client';
 import { encryptSecret } from '../common/utils/secret-crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountService } from './account.service';
@@ -32,10 +33,14 @@ describe('AccountService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    session: {
+      updateMany: jest.fn(),
+    },
     authAccount: {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    $transaction: jest.fn(),
   } as unknown as PrismaService;
 
   beforeEach(() => {
@@ -47,6 +52,9 @@ describe('AccountService', () => {
     generateTwoFactorSecretMock.mockReturnValue('two-factor-secret');
     buildTwoFactorOtpAuthUrlMock.mockReturnValue(
       'otpauth://totp/Fazelo:ana@example.com',
+    );
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      async (callback: (tx: PrismaService) => Promise<unknown>) => callback(prisma),
     );
   });
 
@@ -88,6 +96,10 @@ describe('AccountService', () => {
         newPassword: 'NovaSenha123',
       }),
     ).rejects.toThrow(new UnauthorizedException('Invalid current password'));
+
+    expect(prisma.authAccount.update).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
   });
 
   it('changePassword atualiza o hash da senha quando a senha atual esta correta', async () => {
@@ -96,6 +108,8 @@ describe('AccountService', () => {
       passwordHash: await bcrypt.hash('Senha123', 10),
     });
     prisma.authAccount.update.mockResolvedValue({});
+    prisma.user.update.mockResolvedValue({});
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
       service.changePassword('user-1', {
@@ -106,6 +120,23 @@ describe('AccountService', () => {
 
     const updatedHash = prisma.authAccount.update.mock.calls[0][0].data.passwordHash;
     await expect(bcrypt.compare('NovaSenha123', updatedHash)).resolves.toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        passwordChangedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        status: SessionStatus.ACTIVE,
+        revokedAt: null,
+      },
+      data: {
+        status: SessionStatus.REVOKED,
+        revokedAt: expect.any(Date),
+      },
+    });
   });
 
   it('verify2fa com codigo invalido falha', async () => {

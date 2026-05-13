@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as QRCode from 'qrcode';
+import { SessionStatus } from '../generated/prisma/client';
 import {
   buildTwoFactorOtpAuthUrl,
   generateTwoFactorSecret,
@@ -53,10 +54,32 @@ export class AccountService {
     }
 
     const hashedNewPassword = await bcrypt.hash(dto.newPassword, 10);
+    const now = new Date();
 
-    await this.prisma.authAccount.update({
-      where: { id: authAccount.id },
-      data: { passwordHash: hashedNewPassword },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.authAccount.update({
+        where: { id: authAccount.id },
+        data: { passwordHash: hashedNewPassword },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          passwordChangedAt: now,
+        },
+      });
+
+      await tx.session.updateMany({
+        where: {
+          userId,
+          status: SessionStatus.ACTIVE,
+          revokedAt: null,
+        },
+        data: {
+          status: SessionStatus.REVOKED,
+          revokedAt: now,
+        },
+      });
     });
   }
 

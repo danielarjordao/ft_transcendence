@@ -22,6 +22,11 @@ export interface RegisterRequest {
   confirmPassword: string;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface AuthResponse {
   user: User;
   accessToken: string;

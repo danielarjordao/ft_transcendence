@@ -582,6 +582,12 @@ describe('AuthService', () => {
         usedAt: expect.any(Date),
       },
     });
+    expect(tx.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        passwordChangedAt: expect.any(Date),
+      },
+    });
     expect(tx.session.updateMany).toHaveBeenCalledWith({
       where: {
         userId: 'user-1',
