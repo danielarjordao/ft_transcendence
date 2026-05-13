@@ -44,4 +44,20 @@ export const authService = {
       { skipAuthRefresh: true },
     );
   },
+
+  async forgotPassword(email: string): Promise<void> {
+    await api.post(
+      '/auth/forgot-password',
+      { email },
+      { skipAuthRefresh: true },
+    );
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await api.post(
+      '/auth/reset-password',
+      { token, newPassword },
+      { skipAuthRefresh: true },
+    );
+  },
 };
