@@ -59,6 +59,7 @@ export class UsersService {
         bio: true,
         avatarUrl: true,
         accountType: true,
+        twoFactorEnabled: true,
         preferences: true,
         createdAt: true,
       },

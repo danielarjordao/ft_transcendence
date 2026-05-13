@@ -22,6 +22,7 @@ export default function OAuthCallback() {
   const navigate = useNavigate();
   const { login } = useAuth();
   const oauthError = params.get('error');
+  const twoFactorToken = params.get('twoFactorToken');
 
   useEffect(() => {
     if (oauthError) {
@@ -33,6 +34,14 @@ export default function OAuthCallback() {
     const postAuthRedirect =
       sessionStorage.getItem('postAuthRedirect') || '/dashboard';
     sessionStorage.removeItem('postAuthRedirect');
+
+    if (twoFactorToken) {
+      navigate(
+        `/login?twoFactorToken=${encodeURIComponent(twoFactorToken)}&redirect=${encodeURIComponent(postAuthRedirect)}`,
+        { replace: true },
+      );
+      return;
+    }
 
     let isActive = true;
 
@@ -59,7 +68,7 @@ export default function OAuthCallback() {
     return () => {
       isActive = false;
     };
-  }, [login, navigate, oauthError]);
+  }, [login, navigate, oauthError, twoFactorToken]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111' }}>

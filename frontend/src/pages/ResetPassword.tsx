@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 import { authService } from '../services/auth.service';
 
 interface FormErrors {
@@ -71,9 +72,15 @@ export default function ResetPassword() {
       redirectTimeoutRef.current = setTimeout(() => {
         navigate('/login', { replace: true });
       }, 1200);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
       setServerError(
-        err.response?.data?.message ||
+        apiMessage ||
           'Could not reset the password. Please request a new link.',
       );
     } finally {

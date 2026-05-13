@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import axios from 'axios';
 import { authService } from '../services/auth.service';
 
 interface FormErrors {
@@ -38,9 +39,15 @@ export default function ForgotPassword() {
     try {
       await authService.forgotPassword(email.trim());
       setIsSubmitted(true);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
       setServerError(
-        err.response?.data?.message ||
+        apiMessage ||
           'Could not request a password reset right now. Please try again.',
       );
     } finally {

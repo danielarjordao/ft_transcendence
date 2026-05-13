@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useAuthStore } from '../store/auth.store';
 import { usersService } from '../services/users.service';
 import { accountService } from '../services/account.service';
+import { authService } from '../services/auth.service';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -51,6 +52,11 @@ interface PasswordErrors {
   currentPassword?: string;
   newPassword?: string;
   confirmPassword?: string;
+}
+interface TwoFactorState {
+  secret: string;
+  otpauthUrl: string;
+  qrCodeDataUrl: string;
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -262,7 +268,8 @@ function PasswordField({
 
 // ── Profile View ──────────────────────────────────────────────────────────────
 function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
-  const joined = new Date(user.createdAt ?? Date.now()).toLocaleDateString('en-US', {
+  const joinedSource = user.createdAt ? new Date(user.createdAt) : null;
+  const joined = (joinedSource ?? new Date(0)).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
   return (
@@ -287,7 +294,7 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
       <FieldRow label="Email" value={user.email} locked />
       <FieldRow label="Bio" value={user.bio} />
       <SectionLabel>Account</SectionLabel>
-      <FieldRow label="Member Since" value={joined} />
+      <FieldRow label="Member Since" value={joinedSource ? joined : null} />
     </div>
   );
 }
@@ -393,7 +400,8 @@ function ProfileEdit({ user, onCancel, onSave }: {
 
 // ── Security Tab ──────────────────────────────────────────────────────────────
 function SecurityTab() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
+  const setUser = useAuthStore((state) => state.setUser);
   const redirectTimeoutRef = useRef<number | null>(null);
   const [form, setForm] = useState<PasswordForm>({
     currentPassword: '',
@@ -404,6 +412,14 @@ function SecurityTab() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [setupData, setSetupData] = useState<TwoFactorState | null>(null);
+  const [setupCode, setSetupCode] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
+  const [isStarting2fa, setIsStarting2fa] = useState(false);
+  const [isVerifying2fa, setIsVerifying2fa] = useState(false);
+  const [isDisabling2fa, setIsDisabling2fa] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -413,11 +429,45 @@ function SecurityTab() {
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    const syncTwoFactorState = async () => {
+      if (!user) {
+        return;
+      }
+
+      try {
+        const freshUser = await authService.getMe();
+        if (!isActive) {
+          return;
+        }
+
+        if (freshUser.twoFactorEnabled !== user.twoFactorEnabled) {
+          setUser(freshUser);
+        }
+      } catch {
+        // The local user state remains usable even if this background sync fails.
+      }
+    };
+
+    void syncTwoFactorState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [setUser, user]);
+
   const setField = (key: keyof PasswordForm) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
     setServerError(null);
     setSuccessMessage(null);
+  };
+
+  const resetTwoFactorFeedback = () => {
+    setTwoFactorError(null);
+    setTwoFactorSuccess(null);
   };
 
   function validate(): PasswordErrors {
@@ -500,6 +550,88 @@ function SecurityTab() {
       form.newPassword.trim() &&
       form.confirmPassword.trim(),
   );
+
+  const isTwoFactorEnabled = Boolean(user?.twoFactorEnabled);
+
+  const handleStart2faSetup = async () => {
+    setIsStarting2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      const data = await accountService.setup2fa();
+      setSetupData(data);
+      setSetupCode('');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not start 2FA setup right now.');
+    } finally {
+      setIsStarting2fa(false);
+    }
+  };
+
+  const handleVerify2fa = async () => {
+    if (!setupCode.trim()) {
+      setTwoFactorError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+
+    setIsVerifying2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      await accountService.verify2fa(setupCode.trim());
+      if (user) {
+        setUser({ ...user, twoFactorEnabled: true });
+      }
+      setSetupData(null);
+      setSetupCode('');
+      setTwoFactorSuccess('Two-factor authentication enabled successfully.');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not verify the 2FA code.');
+    } finally {
+      setIsVerifying2fa(false);
+    }
+  };
+
+  const handleDisable2fa = async () => {
+    if (!disableCode.trim()) {
+      setTwoFactorError('Enter the 6-digit code to disable 2FA.');
+      return;
+    }
+
+    setIsDisabling2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      await accountService.disable2fa(disableCode.trim());
+      if (user) {
+        setUser({ ...user, twoFactorEnabled: false });
+      }
+      setDisableCode('');
+      setTwoFactorSuccess('Two-factor authentication disabled.');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not disable 2FA right now.');
+    } finally {
+      setIsDisabling2fa(false);
+    }
+  };
 
   return (
     <div>
@@ -599,9 +731,238 @@ function SecurityTab() {
         <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 16 }}>
           Add an extra layer of security by enabling 2FA via an authenticator app.
         </p>
-        <button disabled style={{ padding: '8px 16px', borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}>
-          Enable 2FA
-        </button>
+        {twoFactorError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#2A1010',
+              border: '1px solid #FF4D4D40',
+              borderRadius: 7,
+              padding: '9px 12px',
+              marginBottom: 16,
+              color: T.danger,
+              fontSize: 12,
+            }}
+          >
+            <IconAlert />
+            {twoFactorError}
+          </div>
+        )}
+        {twoFactorSuccess && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#102418',
+              border: '1px solid #4BBE7D44',
+              borderRadius: 7,
+              padding: '9px 12px',
+              marginBottom: 16,
+              color: '#9CE3B8',
+              fontSize: 12,
+            }}
+          >
+            <IconCheck />
+            {twoFactorSuccess}
+          </div>
+        )}
+
+        {!isTwoFactorEnabled && !setupData && (
+          <button
+            onClick={() => void handleStart2faSetup()}
+            disabled={isStarting2fa}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 7,
+              border: 'none',
+              background: !isStarting2fa ? T.primary : T.border,
+              color: !isStarting2fa ? T.primaryText : T.dim,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: !isStarting2fa ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {isStarting2fa ? 'Starting...' : 'Enable 2FA'}
+          </button>
+        )}
+
+        {!isTwoFactorEnabled && setupData && (
+          <div
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              padding: 16,
+              background: T.elevated,
+            }}
+          >
+            <p style={{ color: T.bright, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              Scan this QR code with your authenticator app
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                padding: 12,
+                background: '#FFFFFF',
+                borderRadius: 8,
+                marginBottom: 12,
+              }}
+            >
+              <img
+                src={setupData.qrCodeDataUrl}
+                alt="2FA QR code"
+                style={{ width: 180, height: 180, objectFit: 'contain' }}
+              />
+            </div>
+            <p style={{ color: T.dim, fontSize: 11, marginBottom: 6 }}>
+              Manual setup secret
+            </p>
+            <div
+              style={{
+                padding: '9px 11px',
+                borderRadius: 7,
+                border: `1px solid ${T.borderLight}`,
+                background: T.bg,
+                color: T.bright,
+                fontSize: 12,
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                marginBottom: 8,
+              }}
+            >
+              {setupData.secret}
+            </div>
+            <p style={{ color: T.dim, fontSize: 11, marginBottom: 16, lineHeight: 1.5 }}>
+              If your app prefers manual setup, use the secret above. The `otpauth` URL is also available:
+              {' '}
+              <span style={{ color: T.text, wordBreak: 'break-all' }}>{setupData.otpauthUrl}</span>
+            </p>
+            <PasswordField
+              label="Verification Code"
+              value={setupCode}
+              onChange={(value) => {
+                setSetupCode(value.replace(/\D/g, '').slice(0, 6));
+                resetTwoFactorFeedback();
+              }}
+              hint="Enter the 6-digit code currently shown in your authenticator app."
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void handleVerify2fa();
+                }
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setSetupData(null);
+                  setSetupCode('');
+                  resetTwoFactorFeedback();
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 7,
+                  border: `1px solid ${T.borderLight}`,
+                  background: 'transparent',
+                  color: T.text,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleVerify2fa()}
+                disabled={setupCode.trim().length !== 6 || isVerifying2fa}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 7,
+                  border: 'none',
+                  background:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? T.primary
+                      : T.border,
+                  color:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? T.primaryText
+                      : T.dim,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? 'pointer'
+                      : 'not-allowed',
+                }}
+              >
+                {isVerifying2fa ? 'Verifying...' : 'Verify and Enable'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isTwoFactorEnabled && (
+          <div
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              padding: 16,
+              background: T.elevated,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                color: '#9CE3B8',
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: 12,
+              }}
+            >
+              <IconCheck />
+              2FA is enabled on this account
+            </div>
+            <PasswordField
+              label="Verification Code"
+              value={disableCode}
+              onChange={(value) => {
+                setDisableCode(value.replace(/\D/g, '').slice(0, 6));
+                resetTwoFactorFeedback();
+              }}
+              hint="Enter a current 6-digit code to confirm deactivation."
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void handleDisable2fa();
+                }
+              }}
+            />
+            <button
+              onClick={() => void handleDisable2fa()}
+              disabled={disableCode.trim().length !== 6 || isDisabling2fa}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 7,
+                border: `1px solid ${T.danger}`,
+                background: 'transparent',
+                color:
+                  disableCode.trim().length === 6 && !isDisabling2fa
+                    ? T.danger
+                    : T.dim,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor:
+                  disableCode.trim().length === 6 && !isDisabling2fa
+                    ? 'pointer'
+                    : 'not-allowed',
+              }}
+            >
+              {isDisabling2fa ? 'Disabling...' : 'Disable 2FA'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

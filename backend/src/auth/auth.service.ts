@@ -169,6 +169,7 @@ export class AuthService {
       bio: user.bio || '',
       avatarUrl: user.avatarUrl,
       accountType: user.accountType,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled),
     };
   }
 
@@ -884,6 +885,20 @@ export class AuthService {
     const oauthToken = await this.exchangeOAuth42CodeForToken(code);
     const profile = await this.fetchOAuth42Profile(oauthToken.access_token as string);
     const user = await this.resolveOAuth42User(profile);
+
+    if (user.twoFactorEnabled) {
+      if (!user.twoFactorSecretEnc) {
+        throw new InternalServerErrorException(
+          'Two-factor authentication is not configured correctly',
+        );
+      }
+
+      return {
+        requiresTwoFactor: true as const,
+        twoFactorToken: await this.generateTwoFactorToken(user.id),
+      };
+    }
+
     const tokens = await this.generateTokens(user.id, user.email);
 
     await this.createSession(user.id, tokens.refreshToken, context);

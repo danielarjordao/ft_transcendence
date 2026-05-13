@@ -487,6 +487,35 @@ describe('Auth and Users HTTP flows (e2e)', () => {
     );
   });
 
+  it('GET /api/auth/42/callback com 2FA pendente redireciona sem emitir cookies finais', async () => {
+    authService.oauth42Callback.mockResolvedValue({
+      requiresTwoFactor: true,
+      twoFactorToken: 'oauth-2fa-token',
+    });
+
+    const response = await request(app.getHttpServer())
+      .get('/api/auth/42/callback')
+      .query({
+        code: 'oauth-code',
+        state: 'expected-state',
+      })
+      .set('Cookie', ['oauth42_state=expected-state'])
+      .expect(302);
+
+    expect(response.headers.location).toBe(
+      'http://localhost:5173/auth/callback?twoFactorToken=oauth-2fa-token',
+    );
+    expect(response.headers['set-cookie']).toEqual(
+      expect.arrayContaining([expect.stringContaining('oauth42_state=;')]),
+    );
+    expect(response.headers['set-cookie']).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('accessToken='),
+        expect.stringContaining('refreshToken='),
+      ]),
+    );
+  });
+
   it('GET /api/auth/42/callback com HTTPS habilitado marca cookies como Secure', async () => {
     process.env.HTTPS_ENABLED = 'true';
     process.env.API_URL = 'https://localhost:3000';

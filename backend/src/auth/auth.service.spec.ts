@@ -149,6 +149,7 @@ describe('AuthService', () => {
         bio: '',
         avatarUrl: null,
         accountType: 'standard',
+        twoFactorEnabled: false,
       },
     });
 
@@ -259,6 +260,7 @@ describe('AuthService', () => {
         bio: '',
         avatarUrl: 'https://cdn.example.com/avatar.png',
         accountType: 'oauth_42',
+        twoFactorEnabled: false,
       },
     });
   });
@@ -362,6 +364,7 @@ describe('AuthService', () => {
         bio: '',
         avatarUrl: null,
         accountType: 'standard',
+        twoFactorEnabled: true,
       },
     });
   });
@@ -498,6 +501,21 @@ describe('AuthService', () => {
     expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
   });
 
+  it('forgotPassword nao envia email para conta sem auth LOCAL', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-42',
+      email: 'oauth@example.com',
+    });
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.forgotPassword({ email: 'oauth@example.com' }),
+    ).resolves.toBeUndefined();
+
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(mailService.sendPasswordResetEmail).not.toHaveBeenCalled();
+  });
+
   it('forgotPassword salva hash do token e envia email', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
@@ -616,6 +634,8 @@ describe('AuthService', () => {
         newPassword: 'NovaSenha123',
       }),
     ).rejects.toThrow(new UnauthorizedException('Reset token expired'));
+
+    expect(prisma.authAccount.findUnique).not.toHaveBeenCalled();
   });
 
   it('resetPassword rejeita token ja usado', async () => {
@@ -633,6 +653,26 @@ describe('AuthService', () => {
         newPassword: 'NovaSenha123',
       }),
     ).rejects.toThrow('Reset token not found');
+
+    expect(prisma.authAccount.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('resetPassword rejeita quando o usuario nao tem auth LOCAL', async () => {
+    prisma.passwordResetToken.findUnique.mockResolvedValue({
+      id: 'prt-1',
+      userId: 'user-42',
+      tokenHash: hashToken('reset-token'),
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    prisma.authAccount.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.resetPassword({
+        token: 'reset-token',
+        newPassword: 'NovaSenha123',
+      }),
+    ).rejects.toThrow('Local auth account not found');
   });
 
   it('oauth42Callback troca code por token, busca perfil e cria sessao local', async () => {
@@ -692,6 +732,7 @@ describe('AuthService', () => {
         bio: '',
         avatarUrl: 'https://cdn.example.com/avatar.png',
         accountType: 'oauth_42',
+        twoFactorEnabled: false,
       },
     });
 
@@ -760,6 +801,7 @@ describe('AuthService', () => {
         bio: '',
         avatarUrl: null,
         accountType: 'standard',
+        twoFactorEnabled: false,
       },
     });
 
@@ -949,6 +991,62 @@ describe('AuthService', () => {
       },
     });
     expect(prisma.authAccount.update).toHaveBeenCalled();
+  });
+
+  it('oauth42Callback exige segundo fator quando o usuario da 42 ja tem 2FA habilitado', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'provider-access-token',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 42,
+          email: 'oauth@example.com',
+          login: 'oauth_user',
+          displayname: 'OAuth User',
+          image: { link: 'https://cdn.example.com/avatar.png' },
+        }),
+      }) as unknown as typeof fetch;
+
+    prisma.authAccount.findUnique.mockResolvedValue({
+      id: 'auth-42',
+      user: {
+        id: 'user-42',
+        email: 'oauth@example.com',
+        fullName: 'Ana Local',
+        avatarUrl: 'https://cdn.example.com/local-avatar.png',
+        accountType: 'oauth_42',
+        username: 'oauth_user',
+        bio: null,
+        twoFactorEnabled: true,
+        twoFactorSecretEnc: encryptSecret('two-factor-secret'),
+      },
+    });
+    prisma.user.update.mockResolvedValue({
+      id: 'user-42',
+      email: 'oauth@example.com',
+      username: 'oauth_user',
+      fullName: 'Ana Local',
+      bio: null,
+      avatarUrl: 'https://cdn.example.com/local-avatar.png',
+      accountType: 'oauth_42',
+      twoFactorEnabled: true,
+      twoFactorSecretEnc: encryptSecret('two-factor-secret'),
+    });
+    prisma.authAccount.update.mockResolvedValue({});
+    (jwtService.signAsync as jest.Mock).mockResolvedValueOnce('oauth-2fa-token');
+
+    await expect(service.oauth42Callback('oauth-code')).resolves.toEqual({
+      requiresTwoFactor: true,
+      twoFactorToken: 'oauth-2fa-token',
+    });
+
+    expect(prisma.session.create).not.toHaveBeenCalled();
   });
 
   it('oauth42Callback rejeita quando troca do code falha', async () => {

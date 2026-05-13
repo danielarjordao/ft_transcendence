@@ -3,14 +3,15 @@ import type {
   LoginRequest,
   RegisterRequest,
   AuthResponse,
+  SignInResponse,
   TokenPairResponse,
   User,
 } from '../types/auth';
 
 export const authService = {
-  async login(data: LoginRequest): Promise<AuthResponse> {
+  async login(data: LoginRequest): Promise<SignInResponse> {
     // TODO: backend integration — POST /auth/sign-in
-    const res = await api.post<AuthResponse>('/auth/sign-in', data);
+    const res = await api.post<SignInResponse>('/auth/sign-in', data);
     return res.data;
   },
 
@@ -33,6 +34,17 @@ export const authService = {
       { skipAuthRefresh: true },
     );
 
+    return res.data;
+  },
+
+  async signInWithTwoFactor(
+    twoFactorToken: string,
+    code: string,
+  ): Promise<AuthResponse> {
+    const res = await api.post<AuthResponse>('/auth/2fa/sign-in', {
+      twoFactorToken,
+      code,
+    });
     return res.data;
   },
 
