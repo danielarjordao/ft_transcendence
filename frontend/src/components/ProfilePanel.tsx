@@ -41,13 +41,6 @@ interface FormErrors {
   bio?: string;
 }
 
-const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  standard: 'Standard',
-  oauth_42: '42 OAuth',
-  oauth_google: 'Google OAuth',
-  oauth_github: 'GitHub OAuth',
-};
-
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IconX = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -214,7 +207,6 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
       <FieldRow label="Bio" value={user.bio} />
       <SectionLabel>Account</SectionLabel>
       <FieldRow label="Member Since" value={joined} />
-      <FieldRow label="Account Type" value={ACCOUNT_TYPE_LABEL[user.accountType] ?? user.accountType} />
     </div>
   );
 }
