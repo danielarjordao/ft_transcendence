@@ -7,6 +7,11 @@ WORKDIR /app
 # Copies dependency files first so npm install can be cached separately
 COPY package*.json ./
 
+# Prisma precisa do OpenSSL presente na imagem para detectar corretamente a libssl.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 # Installs dependencies before copying the rest of the project
 RUN npm install
 

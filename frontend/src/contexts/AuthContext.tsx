@@ -1,6 +1,7 @@
-import { createContext, useContext } from 'react';
+import { createContext, useCallback, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/auth';
+import { authService } from '../services/auth.service';
 import { useAuthStore } from '../store/auth.store';
 
 interface AuthContextType {
@@ -8,13 +9,23 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (accessToken: string, refreshToken: string, user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { user, isLoading, login, logout } = useAuthStore();
+  const { user, isLoading, login, logout: clearLocalAuth } = useAuthStore();
+
+  const logout = useCallback(async () => {
+    try {
+      await authService.logout(useAuthStore.getState().refreshToken || undefined);
+    } catch {
+      // Local cleanup still happens even if the backend logout endpoint is unavailable.
+    } finally {
+      clearLocalAuth();
+    }
+  }, [clearLocalAuth]);
 
   return (
     <AuthContext.Provider value={{

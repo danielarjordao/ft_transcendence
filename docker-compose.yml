@@ -64,9 +64,12 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
+      - ./certs:/app/certs:ro
       - /app/node_modules
     environment:
       VITE_API_URL: "${VITE_API_URL}"
+      VITE_HTTPS_KEY_PATH: /app/certs/localhost-key.pem
+      VITE_HTTPS_CERT_PATH: /app/certs/localhost-cert.pem
     depends_on:
       - backend
 

@@ -1,5 +1,11 @@
 import api from './api';
-import type { LoginRequest, RegisterRequest, AuthResponse, User } from '../types/auth';
+import type {
+  LoginRequest,
+  RegisterRequest,
+  AuthResponse,
+  TokenPairResponse,
+  User,
+} from '../types/auth';
 
 export const authService = {
   async login(data: LoginRequest): Promise<AuthResponse> {
@@ -20,8 +26,22 @@ export const authService = {
     return res.data;
   },
 
-  async logout(refreshToken: string): Promise<void> {
+  async refresh(refreshToken?: string): Promise<TokenPairResponse> {
+    const res = await api.post<TokenPairResponse>(
+      '/auth/refresh',
+      refreshToken ? { refreshToken } : {},
+      { skipAuthRefresh: true },
+    );
+
+    return res.data;
+  },
+
+  async logout(refreshToken?: string): Promise<void> {
     // TODO: backend integration — POST /auth/logout
-    await api.post('/auth/logout', { refreshToken });
+    await api.post(
+      '/auth/logout',
+      refreshToken ? { refreshToken } : {},
+      { skipAuthRefresh: true },
+    );
   },
 };

@@ -182,7 +182,7 @@ export class AuthService {
   }
 
   private async generateRefreshToken(userId: string, email: string) {
-    const payload = { sub: userId, email };
+    const payload = { sub: userId, email, jti: randomBytes(16).toString('hex') };
 
     return this.jwtService.signAsync(payload, {
       secret: this.getRefreshTokenSecret(),

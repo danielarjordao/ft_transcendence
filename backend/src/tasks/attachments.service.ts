@@ -70,6 +70,11 @@ export class AttachmentsService {
     return attachment;
   }
 
+  async getPreviewUrl(userId: string, attachmentId: string) {
+    const attachment = await this.getById(userId, attachmentId);
+    return attachment.storageKey;
+  }
+
   async remove(userId: string, attachmentId: string) {
     const attachment = await this.getById(userId, attachmentId);
     const task = await this.tasksService.findOne(userId, attachment.taskId);
