@@ -1,7 +1,10 @@
+import axios from 'axios';
 import { useState, useEffect } from 'react';
 import type { User } from '../types/auth';
 import { AvatarUpload } from './AvatarUpload';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuthStore } from '../store/auth.store';
+import { usersService } from '../services/users.service';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -220,7 +223,7 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
 function ProfileEdit({ user, onCancel, onSave }: {
   user: User;
   onCancel: () => void;
-  onSave: (data: ProfileForm) => Promise<void>;
+  onSave: (data: ProfileForm, avatarFile: File | null) => Promise<void>;
 }) {
   const [form, setForm] = useState<ProfileForm>({
     fullName: user.fullName,
@@ -253,13 +256,24 @@ function ProfileEdit({ user, onCancel, onSave }: {
   const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
+    setSaveError(null);
     setSaving(true);
     try {
-      await onSave(form);
+      await onSave(form, avatarFile);
     } catch (err: unknown) {
-      if ((err as { type?: string }).type === 'username_taken')
+      const apiType = axios.isAxiosError(err)
+        ? (err.response?.data as { type?: string } | undefined)?.type
+        : (err as { type?: string } | undefined)?.type;
+
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      if (apiType === 'username_taken')
         setErrors(p => ({ ...p, username: 'This username is already taken.' }));
-      else setSaveError('Could not save changes. Please try again.');
+      else setSaveError(apiMessage || 'Could not save changes. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -331,6 +345,7 @@ function SecurityTab() {
 // ── Profile Panel ─────────────────────────────────────────────────────────────
 export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
   const { user, logout } = useAuth();
+  const setUser = useAuthStore((state) => state.setUser);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [tab, setTab] = useState<'profile' | 'security'>('profile');
 
@@ -410,8 +425,28 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
               : <ProfileEdit
                   user={user}
                   onCancel={() => setMode('view')}
-                  onSave={async data => {
-                    console.log('PATCH /api/users/me', data);
+                  onSave={async (data, avatarFile) => {
+                    const updatedProfile = await usersService.updateProfile(data);
+                    let nextUser: User = {
+                      ...user,
+                      ...updatedProfile,
+                    };
+
+                    setUser(nextUser);
+
+                    if (avatarFile) {
+                      try {
+                        const avatarResponse = await usersService.uploadAvatar(avatarFile);
+                        nextUser = {
+                          ...nextUser,
+                          avatarUrl: avatarResponse.avatarUrl,
+                        };
+                        setUser(nextUser);
+                      } catch {
+                        throw new Error('Profile saved, but the avatar upload failed. Please try the image again.');
+                      }
+                    }
+
                     setMode('view');
                   }}
                 />

@@ -32,3 +32,21 @@ export interface TokenPairResponse {
   accessToken: string;
   refreshToken: string;
 }
+
+export interface ProfileUpdateRequest {
+  fullName: string;
+  username: string;
+  bio: string;
+}
+
+export interface ProfileUpdateResponse {
+  id: string;
+  username: string;
+  fullName: string;
+  bio?: string;
+  avatarUrl: string | null;
+}
+
+export interface AvatarUploadResponse {
+  avatarUrl: string | null;
+}

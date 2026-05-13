@@ -34,6 +34,11 @@ api.interceptors.request.use((config) => {
 
   config.headers = config.headers ?? {};
 
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete (config.headers as Record<string, unknown>)['Content-Type'];
+    delete (config.headers as Record<string, unknown>)['content-type'];
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

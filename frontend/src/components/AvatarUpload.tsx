@@ -1,10 +1,10 @@
-import { useState, useRef, useCallback, type DragEvent, type ChangeEvent } from 'react';
+import { useState, useRef, useCallback, useEffect, type DragEvent, type ChangeEvent } from 'react';
 
 // Configuração de validação
-const MAX_SIZE_MB = 2;
+const MAX_SIZE_MB = 5;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-const ALLOWED_LABELS = 'JPG, PNG, WEBP ou GIF';
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif'];
+const ALLOWED_LABELS = 'JPG, PNG ou GIF';
 
 interface AvatarUploadProps {
   currentAvatar?: string | null;
@@ -56,7 +56,20 @@ export function AvatarUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<ValidationError | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
   const { container, text, icon } = sizeMap[size];
+
+  useEffect(() => {
+    setPreview(currentAvatar ?? null);
+  }, [currentAvatar]);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
 
   const processFile = useCallback(
     (file: File) => {
@@ -66,7 +79,12 @@ export function AvatarUpload({
         setError(validationError);
         return;
       }
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+
       const url = URL.createObjectURL(file);
+      objectUrlRef.current = url;
       setPreview(url);
       onFileSelect(file, url);
     },
@@ -98,10 +116,17 @@ export function AvatarUpload({
   };
 
   const handleRemove = () => {
-    setPreview(null);
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+
+    setPreview(currentAvatar ?? null);
     setError(null);
     onRemove?.();
   };
+
+  const hasPendingSelection = preview !== (currentAvatar ?? null);
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -179,7 +204,7 @@ export function AvatarUpload({
         >
           {preview ? 'Trocar foto' : 'Enviar foto'}
         </button>
-        {preview && onRemove && (
+        {hasPendingSelection && onRemove && (
           <>
             <span className="text-gray-600">·</span>
             <button
@@ -187,7 +212,7 @@ export function AvatarUpload({
               onClick={handleRemove}
               className="text-gray-500 hover:text-red-400 transition-colors"
             >
-              Remover
+              Descartar
             </button>
           </>
         )}
