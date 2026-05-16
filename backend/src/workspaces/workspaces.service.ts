@@ -91,11 +91,25 @@ export class WorkspacesService {
         take: limit,
         skip: offset,
         orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { tasks: true } },
+          members: {
+            where: { userId: userId },
+            select: { role: true },
+          },
+        },
       }),
     ]);
 
     return {
-      items: workspaces,
+      items: workspaces.map((ws) => ({
+        id: ws.id,
+        name: ws.name,
+        description: ws.description,
+        createdAt: ws.createdAt,
+        taskCount: ws._count.tasks,
+        userRole: ws.members[0]?.role.toLowerCase() || 'member',
+      })),
       pageInfo: {
         limit,
         offset,
