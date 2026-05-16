@@ -11,7 +11,6 @@ import type { Task, Subject } from './TaskCard';
 import { useWorkspaceStore } from '../../store/workspace.store';
 import ChatPanel from '../chat/ChatPanel';
 import { useAuth } from '../../contexts/AuthContext';
-import { totalUnread } from '../../constants/chat';
 import { workspacesService } from '../../services/workspaces.service';
 import { workspaceInvitationsService } from '../../services/workspace-invitations.service';
 import type { WorkspaceMember } from '../../types/workspace';
@@ -900,7 +899,7 @@ export default function KanbanBoard() {
   return (
     <>
       <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#111111', overflow: 'hidden' }}>
-        <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={totalUnread} />
+        <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={0} />
 
         {/* workspace header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #2A2A2A', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
