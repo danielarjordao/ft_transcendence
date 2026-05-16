@@ -5,7 +5,6 @@ import { ProfilePanel } from '../components/ProfilePanel';
 import { useAuth } from '../contexts/AuthContext';
 import { useWorkspaceStore } from '../store/workspace.store';
 import ChatPanel from '../components/chat/ChatPanel';
-import { totalUnread } from '../constants/chat';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -176,7 +175,7 @@ export default function Profile() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { workspaces, fetchWorkspaces } = useWorkspaceStore();
-  
+
   const [profileOpen, setProfileOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
@@ -184,11 +183,7 @@ export default function Profile() {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
 
-  // Calcular tasks atribuídas (mock por agora, depois virá de GET /api/users/me)
-  // TODO: Quando backend estiver pronto, substituir por: user.assignedTasksCount
-  const assignedTasksCount = 0;
-
-  const joinedDate = user?.createdAt 
+  const joinedDate = user?.createdAt
     ? new Date(user.createdAt).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
@@ -207,11 +202,11 @@ export default function Profile() {
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
-      <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={totalUnread} />
+      <Navbar onOpenProfile={() => setProfileOpen(true)} onOpenChat={() => setChatOpen(true)} chatUnreadCount={0} />
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '40px 24px' }}>
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
-          
+
           {/* Header com Avatar */}
           <div
             style={{
@@ -227,11 +222,11 @@ export default function Profile() {
             }}
           >
             <UserAvatar user={user} size={96} />
-            
+
             <h1 style={{ color: T.bright, fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 4 }}>
               {user?.fullName}
             </h1>
-            
+
             <p style={{ color: T.dim, fontSize: 14, marginBottom: 16 }}>
               @{user?.username}
             </p>
@@ -288,7 +283,7 @@ export default function Profile() {
             <StatCard
               icon={<IconCheckSquare />}
               label="Tasks Assigned"
-              value={assignedTasksCount}
+              value={user?.assignedTasksCount || 0}
             />
           </div>
 
