@@ -26,15 +26,27 @@ export const friendsService = {
     return response.data;
   },
 
-  // 2.4 List Friend Requests (Pendentes recebidos e enviados)
+  // 2.4 List Friend Requests
   async getFriendRequests(): Promise<FriendRequest[]> {
     const response = await api.get('/friend-requests');
     return response.data;
   },
 
   // 2.5 Send Friend Request
-  async sendRequest(targetUserId: string) {
-    const response = await api.post('/friend-requests', { targetUserId });
+  async sendRequest(usernameInput: string) {
+    const cleanUsername = usernameInput.toLowerCase().trim();
+
+    const searchRes = await api.get(`/users?search=${cleanUsername}&limit=10`);
+
+    const usersList = searchRes.data.items || searchRes.data;
+
+    const targetUser = usersList.find((u: any) => u.username.toLowerCase() === cleanUsername);
+
+    if (!targetUser) {
+      throw { response: { data: { message: `User @${cleanUsername} not found in the system.` } } };
+    }
+
+    const response = await api.post('/friend-requests', { targetUserId: targetUser.id });
     return response.data;
   },
 
