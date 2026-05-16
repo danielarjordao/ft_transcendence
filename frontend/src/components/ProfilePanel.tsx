@@ -1,7 +1,13 @@
-import { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useState, useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { User } from '../types/auth';
 import { AvatarUpload } from './AvatarUpload';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuthStore } from '../store/auth.store';
+import { usersService } from '../services/users.service';
+import { accountService } from '../services/account.service';
+import { authService } from '../services/auth.service';
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 const T = {
@@ -37,13 +43,21 @@ interface FormErrors {
   username?: string;
   bio?: string;
 }
-
-const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  standard: 'Standard',
-  oauth_42: '42 OAuth',
-  oauth_google: 'Google OAuth',
-  oauth_github: 'GitHub OAuth',
-};
+interface PasswordForm {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+interface PasswordErrors {
+  currentPassword?: string;
+  newPassword?: string;
+  confirmPassword?: string;
+}
+interface TwoFactorState {
+  secret: string;
+  otpauthUrl: string;
+  qrCodeDataUrl: string;
+}
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IconX = () => (
@@ -183,9 +197,79 @@ function Field({
   );
 }
 
+function PasswordField({
+  label,
+  value,
+  onChange,
+  error,
+  onKeyDown,
+  hint,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  onKeyDown?: (event: ReactKeyboardEvent<HTMLInputElement>) => void;
+  hint?: string;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label
+        style={{
+          display: 'block',
+          color: T.dim,
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          marginBottom: 5,
+        }}
+      >
+        {label}
+      </label>
+      <input
+        type="password"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        style={{
+          width: '100%',
+          background: T.inputBg,
+          border: `1px solid ${error ? T.danger : T.borderLight}`,
+          borderRadius: 7,
+          padding: '9px 11px',
+          color: T.bright,
+          fontSize: 13,
+          outline: 'none',
+          boxSizing: 'border-box',
+        }}
+      />
+      {hint && !error && (
+        <p style={{ color: T.dim, fontSize: 11, marginTop: 4 }}>{hint}</p>
+      )}
+      {error && (
+        <p
+          style={{
+            color: T.danger,
+            fontSize: 11,
+            marginTop: 4,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          <IconAlert />
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Profile View ──────────────────────────────────────────────────────────────
 function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
-  const joined = new Date(user.createdAt ?? Date.now()).toLocaleDateString('en-US', {
+  const joinedSource = user.createdAt ? new Date(user.createdAt) : null;
+  const joined = (joinedSource ?? new Date(0)).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
   return (
@@ -210,8 +294,7 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
       <FieldRow label="Email" value={user.email} locked />
       <FieldRow label="Bio" value={user.bio} />
       <SectionLabel>Account</SectionLabel>
-      <FieldRow label="Member Since" value={joined} />
-      <FieldRow label="Account Type" value={ACCOUNT_TYPE_LABEL[user.accountType] ?? user.accountType} />
+      <FieldRow label="Member Since" value={joinedSource ? joined : null} />
     </div>
   );
 }
@@ -220,7 +303,7 @@ function ProfileView({ user, onEdit }: { user: User; onEdit: () => void }) {
 function ProfileEdit({ user, onCancel, onSave }: {
   user: User;
   onCancel: () => void;
-  onSave: (data: ProfileForm) => Promise<void>;
+  onSave: (data: ProfileForm, avatarFile: File | null) => Promise<void>;
 }) {
   const [form, setForm] = useState<ProfileForm>({
     fullName: user.fullName,
@@ -253,13 +336,24 @@ function ProfileEdit({ user, onCancel, onSave }: {
   const handleSave = async () => {
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
+    setSaveError(null);
     setSaving(true);
     try {
-      await onSave(form);
+      await onSave(form, avatarFile);
     } catch (err: unknown) {
-      if ((err as { type?: string }).type === 'username_taken')
+      const apiType = axios.isAxiosError(err)
+        ? (err.response?.data as { type?: string } | undefined)?.type
+        : (err as { type?: string } | undefined)?.type;
+
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      if (apiType === 'username_taken')
         setErrors(p => ({ ...p, username: 'This username is already taken.' }));
-      else setSaveError('Could not save changes. Please try again.');
+      else setSaveError(apiMessage || 'Could not save changes. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -306,23 +400,569 @@ function ProfileEdit({ user, onCancel, onSave }: {
 
 // ── Security Tab ──────────────────────────────────────────────────────────────
 function SecurityTab() {
+  const { logout, user } = useAuth();
+  const setUser = useAuthStore((state) => state.setUser);
+  const redirectTimeoutRef = useRef<number | null>(null);
+  const [form, setForm] = useState<PasswordForm>({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [errors, setErrors] = useState<PasswordErrors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [setupData, setSetupData] = useState<TwoFactorState | null>(null);
+  const [setupCode, setSetupCode] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState<string | null>(null);
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState<string | null>(null);
+  const [isStarting2fa, setIsStarting2fa] = useState(false);
+  const [isVerifying2fa, setIsVerifying2fa] = useState(false);
+  const [isDisabling2fa, setIsDisabling2fa] = useState(false);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const syncTwoFactorState = async () => {
+      if (!user) {
+        return;
+      }
+
+      try {
+        const freshUser = await authService.getMe();
+        if (!isActive) {
+          return;
+        }
+
+        if (freshUser.twoFactorEnabled !== user.twoFactorEnabled) {
+          setUser(freshUser);
+        }
+      } catch {
+        // The local user state remains usable even if this background sync fails.
+      }
+    };
+
+    void syncTwoFactorState();
+
+    return () => {
+      isActive = false;
+    };
+  }, [setUser, user]);
+
+  const setField = (key: keyof PasswordForm) => (value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+    setServerError(null);
+    setSuccessMessage(null);
+  };
+
+  const resetTwoFactorFeedback = () => {
+    setTwoFactorError(null);
+    setTwoFactorSuccess(null);
+  };
+
+  function validate(): PasswordErrors {
+    const nextErrors: PasswordErrors = {};
+
+    if (!form.currentPassword.trim()) {
+      nextErrors.currentPassword = 'Current password is required.';
+    }
+
+    if (!form.newPassword) {
+      nextErrors.newPassword = 'New password is required.';
+    } else if (form.newPassword.length < 8) {
+      nextErrors.newPassword = 'Minimum 8 characters.';
+    } else if (!/(?=.*[A-Za-z])(?=.*\d).+/.test(form.newPassword)) {
+      nextErrors.newPassword =
+        'Password must contain at least one letter and one number.';
+    } else if (form.newPassword === form.currentPassword) {
+      nextErrors.newPassword =
+        'New password must be different from the current one.';
+    }
+
+    if (!form.confirmPassword) {
+      nextErrors.confirmPassword = 'Please confirm your new password.';
+    } else if (form.confirmPassword !== form.newPassword) {
+      nextErrors.confirmPassword = 'Passwords do not match.';
+    }
+
+    return nextErrors;
+  }
+
+  const handleSubmit = async () => {
+    const validationErrors = validate();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setIsSaving(true);
+    setServerError(null);
+    setSuccessMessage(null);
+
+    try {
+      await accountService.changePassword({
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+      setForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setSuccessMessage('Password updated. Please sign in again.');
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        void logout().finally(() => {
+          window.location.href = '/login';
+        });
+      }, 1200);
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      if (apiMessage === 'Invalid current password') {
+        setErrors((prev) => ({
+          ...prev,
+          currentPassword: 'Current password is incorrect.',
+        }));
+      } else {
+        setServerError(apiMessage || 'Could not update password right now.');
+      }
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isPasswordFormFilled = Boolean(
+    form.currentPassword.trim() &&
+      form.newPassword.trim() &&
+      form.confirmPassword.trim(),
+  );
+
+  const isTwoFactorEnabled = Boolean(user?.twoFactorEnabled);
+
+  const handleStart2faSetup = async () => {
+    setIsStarting2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      const data = await accountService.setup2fa();
+      setSetupData(data);
+      setSetupCode('');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not start 2FA setup right now.');
+    } finally {
+      setIsStarting2fa(false);
+    }
+  };
+
+  const handleVerify2fa = async () => {
+    if (!setupCode.trim()) {
+      setTwoFactorError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+
+    setIsVerifying2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      await accountService.verify2fa(setupCode.trim());
+      if (user) {
+        setUser({ ...user, twoFactorEnabled: true });
+      }
+      setSetupData(null);
+      setSetupCode('');
+      setTwoFactorSuccess('Two-factor authentication enabled successfully.');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not verify the 2FA code.');
+    } finally {
+      setIsVerifying2fa(false);
+    }
+  };
+
+  const handleDisable2fa = async () => {
+    if (!disableCode.trim()) {
+      setTwoFactorError('Enter the 6-digit code to disable 2FA.');
+      return;
+    }
+
+    setIsDisabling2fa(true);
+    resetTwoFactorFeedback();
+
+    try {
+      await accountService.disable2fa(disableCode.trim());
+      if (user) {
+        setUser({ ...user, twoFactorEnabled: false });
+      }
+      setDisableCode('');
+      setTwoFactorSuccess('Two-factor authentication disabled.');
+    } catch (err: unknown) {
+      const apiMessage = axios.isAxiosError(err)
+        ? (err.response?.data as { message?: string } | undefined)?.message
+        : err instanceof Error
+          ? err.message
+          : null;
+
+      setTwoFactorError(apiMessage || 'Could not disable 2FA right now.');
+    } finally {
+      setIsDisabling2fa(false);
+    }
+  };
+
   return (
     <div>
       <SectionLabel>Password</SectionLabel>
-      <p style={{ color: T.dim, fontSize: 12, marginTop: 8, marginBottom: 16, lineHeight: 1.6 }}>
-        Password change will be available after backend integration.
+      <p
+        style={{
+          color: T.dim,
+          fontSize: 12,
+          marginTop: 8,
+          marginBottom: 16,
+          lineHeight: 1.6,
+        }}
+      >
+        Update your local password here. Accounts that only use OAuth will be
+        rejected by the backend.
       </p>
-      <button disabled style={{ padding: '8px 16px', borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}>
-        Update Password
+      {serverError && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#2A1010',
+            border: '1px solid #FF4D4D40',
+            borderRadius: 7,
+            padding: '9px 12px',
+            marginBottom: 16,
+            color: T.danger,
+            fontSize: 12,
+          }}
+        >
+          <IconAlert />
+          {serverError}
+        </div>
+      )}
+      {successMessage && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            background: '#102418',
+            border: '1px solid #4BBE7D44',
+            borderRadius: 7,
+            padding: '9px 12px',
+            marginBottom: 16,
+            color: '#9CE3B8',
+            fontSize: 12,
+          }}
+        >
+          <IconCheck />
+          {successMessage}
+        </div>
+      )}
+      <PasswordField
+        label="Current Password"
+        value={form.currentPassword}
+        onChange={setField('currentPassword')}
+        error={errors.currentPassword}
+      />
+      <PasswordField
+        label="New Password"
+        value={form.newPassword}
+        onChange={setField('newPassword')}
+        error={errors.newPassword}
+        hint="At least 8 characters, with one letter and one number."
+      />
+      <PasswordField
+        label="Confirm New Password"
+        value={form.confirmPassword}
+        onChange={setField('confirmPassword')}
+        error={errors.confirmPassword}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            void handleSubmit();
+          }
+        }}
+      />
+      <button
+        onClick={() => void handleSubmit()}
+        disabled={!isPasswordFormFilled || isSaving}
+        style={{
+          padding: '8px 16px',
+          borderRadius: 7,
+          border: 'none',
+          background: isPasswordFormFilled && !isSaving ? T.primary : T.border,
+          color: isPasswordFormFilled && !isSaving ? T.primaryText : T.dim,
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: isPasswordFormFilled && !isSaving ? 'pointer' : 'not-allowed',
+        }}
+      >
+        {isSaving ? 'Updating...' : 'Update Password'}
       </button>
       <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 24, paddingTop: 20 }}>
         <p style={{ color: T.dim, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>Two-Factor Authentication</p>
         <p style={{ color: T.dim, fontSize: 12, lineHeight: 1.6, marginBottom: 16 }}>
           Add an extra layer of security by enabling 2FA via an authenticator app.
         </p>
-        <button disabled style={{ padding: '8px 16px', borderRadius: 7, border: `1px solid ${T.border}`, background: 'transparent', color: T.dim, fontSize: 13, cursor: 'not-allowed', opacity: 0.5 }}>
-          Enable 2FA
-        </button>
+        {twoFactorError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#2A1010',
+              border: '1px solid #FF4D4D40',
+              borderRadius: 7,
+              padding: '9px 12px',
+              marginBottom: 16,
+              color: T.danger,
+              fontSize: 12,
+            }}
+          >
+            <IconAlert />
+            {twoFactorError}
+          </div>
+        )}
+        {twoFactorSuccess && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              background: '#102418',
+              border: '1px solid #4BBE7D44',
+              borderRadius: 7,
+              padding: '9px 12px',
+              marginBottom: 16,
+              color: '#9CE3B8',
+              fontSize: 12,
+            }}
+          >
+            <IconCheck />
+            {twoFactorSuccess}
+          </div>
+        )}
+
+        {!isTwoFactorEnabled && !setupData && (
+          <button
+            onClick={() => void handleStart2faSetup()}
+            disabled={isStarting2fa}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 7,
+              border: 'none',
+              background: !isStarting2fa ? T.primary : T.border,
+              color: !isStarting2fa ? T.primaryText : T.dim,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: !isStarting2fa ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {isStarting2fa ? 'Starting...' : 'Enable 2FA'}
+          </button>
+        )}
+
+        {!isTwoFactorEnabled && setupData && (
+          <div
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              padding: 16,
+              background: T.elevated,
+            }}
+          >
+            <p style={{ color: T.bright, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              Scan this QR code with your authenticator app
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                padding: 12,
+                background: '#FFFFFF',
+                borderRadius: 8,
+                marginBottom: 12,
+              }}
+            >
+              <img
+                src={setupData.qrCodeDataUrl}
+                alt="2FA QR code"
+                style={{ width: 180, height: 180, objectFit: 'contain' }}
+              />
+            </div>
+            <p style={{ color: T.dim, fontSize: 11, marginBottom: 6 }}>
+              Manual setup secret
+            </p>
+            <div
+              style={{
+                padding: '9px 11px',
+                borderRadius: 7,
+                border: `1px solid ${T.borderLight}`,
+                background: T.bg,
+                color: T.bright,
+                fontSize: 12,
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                marginBottom: 8,
+              }}
+            >
+              {setupData.secret}
+            </div>
+            <p style={{ color: T.dim, fontSize: 11, marginBottom: 16, lineHeight: 1.5 }}>
+              If your app prefers manual setup, use the secret above. The `otpauth` URL is also available:
+              {' '}
+              <span style={{ color: T.text, wordBreak: 'break-all' }}>{setupData.otpauthUrl}</span>
+            </p>
+            <PasswordField
+              label="Verification Code"
+              value={setupCode}
+              onChange={(value) => {
+                setSetupCode(value.replace(/\D/g, '').slice(0, 6));
+                resetTwoFactorFeedback();
+              }}
+              hint="Enter the 6-digit code currently shown in your authenticator app."
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void handleVerify2fa();
+                }
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setSetupData(null);
+                  setSetupCode('');
+                  resetTwoFactorFeedback();
+                }}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 7,
+                  border: `1px solid ${T.borderLight}`,
+                  background: 'transparent',
+                  color: T.text,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => void handleVerify2fa()}
+                disabled={setupCode.trim().length !== 6 || isVerifying2fa}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 7,
+                  border: 'none',
+                  background:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? T.primary
+                      : T.border,
+                  color:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? T.primaryText
+                      : T.dim,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor:
+                    setupCode.trim().length === 6 && !isVerifying2fa
+                      ? 'pointer'
+                      : 'not-allowed',
+                }}
+              >
+                {isVerifying2fa ? 'Verifying...' : 'Verify and Enable'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isTwoFactorEnabled && (
+          <div
+            style={{
+              border: `1px solid ${T.border}`,
+              borderRadius: 10,
+              padding: 16,
+              background: T.elevated,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                color: '#9CE3B8',
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: 12,
+              }}
+            >
+              <IconCheck />
+              2FA is enabled on this account
+            </div>
+            <PasswordField
+              label="Verification Code"
+              value={disableCode}
+              onChange={(value) => {
+                setDisableCode(value.replace(/\D/g, '').slice(0, 6));
+                resetTwoFactorFeedback();
+              }}
+              hint="Enter a current 6-digit code to confirm deactivation."
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  void handleDisable2fa();
+                }
+              }}
+            />
+            <button
+              onClick={() => void handleDisable2fa()}
+              disabled={disableCode.trim().length !== 6 || isDisabling2fa}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 7,
+                border: `1px solid ${T.danger}`,
+                background: 'transparent',
+                color:
+                  disableCode.trim().length === 6 && !isDisabling2fa
+                    ? T.danger
+                    : T.dim,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor:
+                  disableCode.trim().length === 6 && !isDisabling2fa
+                    ? 'pointer'
+                    : 'not-allowed',
+              }}
+            >
+              {isDisabling2fa ? 'Disabling...' : 'Disable 2FA'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -331,6 +971,7 @@ function SecurityTab() {
 // ── Profile Panel ─────────────────────────────────────────────────────────────
 export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
   const { user, logout } = useAuth();
+  const setUser = useAuthStore((state) => state.setUser);
   const [mode, setMode] = useState<'view' | 'edit'>('view');
   const [tab, setTab] = useState<'profile' | 'security'>('profile');
 
@@ -410,8 +1051,28 @@ export function ProfilePanel({ open, onClose }: ProfilePanelProps) {
               : <ProfileEdit
                   user={user}
                   onCancel={() => setMode('view')}
-                  onSave={async data => {
-                    console.log('PATCH /api/users/me', data);
+                  onSave={async (data, avatarFile) => {
+                    const updatedProfile = await usersService.updateProfile(data);
+                    let nextUser: User = {
+                      ...user,
+                      ...updatedProfile,
+                    };
+
+                    setUser(nextUser);
+
+                    if (avatarFile) {
+                      try {
+                        const avatarResponse = await usersService.uploadAvatar(avatarFile);
+                        nextUser = {
+                          ...nextUser,
+                          avatarUrl: avatarResponse.avatarUrl,
+                        };
+                        setUser(nextUser);
+                      } catch {
+                        throw new Error('Profile saved, but the avatar upload failed. Please try the image again.');
+                      }
+                    }
+
                     setMode('view');
                   }}
                 />

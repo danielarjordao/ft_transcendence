@@ -90,7 +90,7 @@ export class UsersController {
       new ParseFilePipe({
         validators: [
           new MaxFileSizeValidator({ maxSize: 5242880 }), // 5MB limit
-          new FileTypeValidator({ fileType: /(jpg|jpeg|png)$/i }), // Regex only allows jpg, jpeg, png
+          new FileTypeValidator({ fileType: /(jpg|jpeg|png|gif)$/i }), // Regex allows jpg, jpeg, png and gif
         ],
       }),
     )

@@ -82,6 +82,17 @@ export class AuthController {
     res.clearCookie(REFRESH_TOKEN_COOKIE, this.getCookieOptions());
   }
 
+  private buildFrontendRedirectUrl(params?: Record<string, string>): string {
+    const baseUrl = this.authService.getFrontendAuthCallbackUrl();
+
+    if (!params || Object.keys(params).length === 0) {
+      return baseUrl;
+    }
+
+    const searchParams = new URLSearchParams(params);
+    return `${baseUrl}?${searchParams.toString()}`;
+  }
+
   private resolveRefreshToken(req: Request, dto?: RefreshTokenDto): string | undefined {
     return dto?.refreshToken || getCookieValue(req.headers.cookie, REFRESH_TOKEN_COOKIE);
   }
@@ -193,13 +204,21 @@ export class AuthController {
     res.clearCookie(OAUTH42_STATE_COOKIE, this.getCookieOptions());
 
     if (!code || !state || !stateFromCookie || stateFromCookie !== state) {
-      return res.redirect(`${this.authService.getFrontendAuthCallbackUrl()}?error=oauth_state`);
+      return res.redirect(this.buildFrontendRedirectUrl({ error: 'oauth_state' }));
     }
 
     const result = await this.authService.oauth42Callback(
       code,
       this.getSessionContext(req),
     );
+
+    if ('requiresTwoFactor' in result && result.requiresTwoFactor) {
+      return res.redirect(
+        this.buildFrontendRedirectUrl({
+          twoFactorToken: result.twoFactorToken,
+        }),
+      );
+    }
 
     this.setAuthCookies(res, result.accessToken, result.refreshToken);
 

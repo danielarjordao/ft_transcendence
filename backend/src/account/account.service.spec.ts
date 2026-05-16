@@ -1,6 +1,10 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as QRCode from 'qrcode';
+import { SessionStatus } from '../generated/prisma/client';
 import { encryptSecret } from '../common/utils/secret-crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountService } from './account.service';
@@ -32,10 +36,14 @@ describe('AccountService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    session: {
+      updateMany: jest.fn(),
+    },
     authAccount: {
       findFirst: jest.fn(),
       update: jest.fn(),
     },
+    $transaction: jest.fn(),
   } as unknown as PrismaService;
 
   beforeEach(() => {
@@ -47,6 +55,9 @@ describe('AccountService', () => {
     generateTwoFactorSecretMock.mockReturnValue('two-factor-secret');
     buildTwoFactorOtpAuthUrlMock.mockReturnValue(
       'otpauth://totp/Fazelo:ana@example.com',
+    );
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      async (callback: (tx: PrismaService) => Promise<unknown>) => callback(prisma),
     );
   });
 
@@ -76,6 +87,23 @@ describe('AccountService', () => {
     expect(encryptedSecret).not.toBe(result.secret);
   });
 
+  it('setup2fa rejeita conta que ja tem 2FA habilitado', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'ana@example.com',
+      username: 'ana',
+      twoFactorEnabled: true,
+    });
+
+    await expect(service.setup2fa('user-1')).rejects.toThrow(
+      new BadRequestException(
+        'Two-factor authentication is already enabled',
+      ),
+    );
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('changePassword falha com senha atual invalida', async () => {
     prisma.authAccount.findFirst.mockResolvedValue({
       id: 'auth-1',
@@ -88,6 +116,10 @@ describe('AccountService', () => {
         newPassword: 'NovaSenha123',
       }),
     ).rejects.toThrow(new UnauthorizedException('Invalid current password'));
+
+    expect(prisma.authAccount.update).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
   });
 
   it('changePassword atualiza o hash da senha quando a senha atual esta correta', async () => {
@@ -96,6 +128,8 @@ describe('AccountService', () => {
       passwordHash: await bcrypt.hash('Senha123', 10),
     });
     prisma.authAccount.update.mockResolvedValue({});
+    prisma.user.update.mockResolvedValue({});
+    prisma.session.updateMany.mockResolvedValue({ count: 1 });
 
     await expect(
       service.changePassword('user-1', {
@@ -106,6 +140,42 @@ describe('AccountService', () => {
 
     const updatedHash = prisma.authAccount.update.mock.calls[0][0].data.passwordHash;
     await expect(bcrypt.compare('NovaSenha123', updatedHash)).resolves.toBe(true);
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'user-1' },
+      data: {
+        passwordChangedAt: expect.any(Date),
+      },
+    });
+    expect(prisma.session.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        status: SessionStatus.ACTIVE,
+        revokedAt: null,
+      },
+      data: {
+        status: SessionStatus.REVOKED,
+        revokedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('changePassword rejeita conta sem autenticacao local', async () => {
+    prisma.authAccount.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.changePassword('user-1', {
+        currentPassword: 'Senha123',
+        newPassword: 'NovaSenha123',
+      }),
+    ).rejects.toThrow(
+      new BadRequestException(
+        'This account does not use password authentication (e.g., OAuth account).',
+      ),
+    );
+
+    expect(prisma.authAccount.update).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.session.updateMany).not.toHaveBeenCalled();
   });
 
   it('verify2fa com codigo invalido falha', async () => {
@@ -118,6 +188,21 @@ describe('AccountService', () => {
     await expect(
       service.verify2fa('user-1', { code: '000000' }),
     ).rejects.toThrow(new UnauthorizedException('Invalid two-factor code'));
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('verify2fa falha quando o setup nao foi iniciado', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      twoFactorPendingSecretEnc: null,
+    });
+
+    await expect(
+      service.verify2fa('user-1', { code: '123456' }),
+    ).rejects.toThrow(
+      new BadRequestException('Two-factor setup has not been started'),
+    );
 
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
@@ -192,5 +277,23 @@ describe('AccountService', () => {
         code: '000000',
       }),
     ).rejects.toThrow(new UnauthorizedException('Invalid two-factor code'));
+  });
+
+  it('disable2fa falha quando 2FA nao esta habilitado', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      twoFactorEnabled: false,
+      twoFactorSecretEnc: null,
+    });
+
+    await expect(
+      service.disable2fa('user-1', {
+        code: '123456',
+      }),
+    ).rejects.toThrow(
+      new BadRequestException('Two-factor authentication is not enabled'),
+    );
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });
