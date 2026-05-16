@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import type { SocketEvents } from '../types/chat';
+import type { SocketEvents } from '../types/socket';
 
 class SocketService {
   private socket: Socket | null = null;

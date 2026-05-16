@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, type ReactElement } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSocket } from '../../contexts/SocketContext';
 
 interface NavbarProps {
   onOpenProfile?: () => void;
@@ -154,13 +155,15 @@ function NotificationDropdown({ notifications, onMarkAllRead, onMarkOneRead, onC
 }
 
 export default function Navbar({ onOpenProfile, onOpenChat, chatUnreadCount = 0 }: NavbarProps) {
+  const { socket, isConnected } = useSocket();
+  const [notifications, setNotifications] = useState<any[]>([]);
   const navigate  = useNavigate();
-const location  = useLocation();
-const isFriends = location.pathname === '/friends';
+  const location  = useLocation();
+  const isFriends = location.pathname === '/friends';
   const { user } = useAuth();
 
   const [notifOpen, setNotifOpen]         = useState(false);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  // const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -170,6 +173,31 @@ const isFriends = location.pathname === '/friends';
   const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   const markOneRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
 
+  // ✅ NOTIFICATIONS LISTENER
+  useEffect(() => {
+    if (!isConnected) return;
+
+    console.log('🟢 Registering notifications listener');
+
+    // ✅ LISTENER: notification:new
+    const handleNewNotification = (notification: any) => {
+      console.log('🔔 New notification (real-time):', notification);
+      
+      // Adicionar ao topo da lista
+      setNotifications(prev => [notification, ...prev]);
+      
+      // Opcional: mostrar toast
+      // toast.info(notification.message);
+    };
+
+    socket.on('notification:new', handleNewNotification);
+
+    // ✅ CLEANUP
+    return () => {
+      console.log('🔴 Removing notifications listener');
+      socket.off('notification:new', handleNewNotification);
+    };
+  }, [isConnected, socket]);
   return (
     <div style={{ height: 56, background: T.bg, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px', flexShrink: 0, zIndex: 30, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>

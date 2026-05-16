@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { workspaceInvitationsService } from '../services/workspace-invitations.service';
 import { useWorkspaceStore } from '../store/workspace.store';
+import { useSocket } from '../contexts/SocketContext';
 
 const ACCENT_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
@@ -76,6 +77,7 @@ export default function WorkspaceSettings() {
   const [nameError, setNameError]         = useState('');
   const [nameSaved, setNameSaved]         = useState(false);
   const [members, setMembers]             = useState<Member[]>(MOCK_MEMBERS);
+  const { socket, isConnected } = useSocket();
   const [addInput, setAddInput]           = useState('');
   const [inviteRole, setInviteRole]       = useState<'member' | 'admin'>('member');
   const [addError, setAddError]           = useState('');
@@ -156,6 +158,59 @@ export default function WorkspaceSettings() {
     removeWorkspace(workspaceId!);
     navigate('/dashboard');
   };
+
+    // ✅ MEMBERS REAL-TIME LISTENERS
+useEffect(() => {
+  if (!isConnected || !workspaceId) return;
+
+  console.log('🟢 Registering members listeners for workspace:', workspaceId);
+
+  // Join workspace room
+  socket.emit('room:join', workspaceId);
+
+  // ✅ LISTENER: member:added
+  const handleMemberAdded = (member: any) => {
+    console.log('👤 Member added (real-time):', member);
+    
+    setMembers(prev => {
+      // Evitar duplicatas
+      if (prev.some(m => m.id === member.userId)) return prev;
+      return [...prev, member];
+    });
+  };
+
+  // ✅ LISTENER: member:removed
+  const handleMemberRemoved = (data: { userId: string }) => {
+    console.log('👤 Member removed (real-time):', data.userId);
+    
+    setMembers(prev => prev.filter(m => m.id !== data.userId));
+  };
+
+  // ✅ LISTENER: member:role_updated
+const handleMemberRoleUpdated = (data: { userId: string; newRole: string }) => {
+  console.log('🔄 Member role updated (real-time):', data);
+  
+  setMembers(prev => prev.map(m => 
+    m.id === data.userId 
+      ? { ...m, role: data.newRole as 'Admin' | 'Moderator' | 'Member' }
+      : m
+  ));
+};
+    // Registrar listeners
+    socket.on('member:added', handleMemberAdded);
+    socket.on('member:removed', handleMemberRemoved);
+    socket.on('member:role_updated', handleMemberRoleUpdated);
+
+    // ✅ CLEANUP
+    return () => {
+      console.log('🔴 Removing members listeners');
+      socket.off('member:added', handleMemberAdded);
+      socket.off('member:removed', handleMemberRemoved);
+      socket.off('member:role_updated', handleMemberRoleUpdated);
+      socket.emit('room:leave', workspaceId);
+    };
+  }, [isConnected, socket, workspaceId]);
+
 
   const labelStyle: React.CSSProperties = {
     fontSize: 11, fontWeight: 600, color: '#888',

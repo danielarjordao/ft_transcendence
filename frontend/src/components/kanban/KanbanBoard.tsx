@@ -14,7 +14,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { totalUnread } from '../../constants/chat';
 import { workspacesService } from '../../services/workspaces.service';
 import { workspaceInvitationsService } from '../../services/workspace-invitations.service';
-import type { WorkspaceMember } from '../../types/workspace';
+import type { WorkspaceMember, Workspace } from '../../types/workspace';
+import { useTasks } from '../../hooks/useTasks';
+import { useBoard } from '../../hooks/useBoard';
 
 const PRESET_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
@@ -820,12 +822,22 @@ function sortTasks(tasks: Task[], sortBy: SortOption): Task[] {
 export default function KanbanBoard() {
   const { workspaceId } = useParams();
   const { user } = useAuth();
-  const { getBoard, updateBoard, workspaces } = useWorkspaceStore();
+  const { getBoard, workspaces } = useWorkspaceStore();
 
   const board     = getBoard(workspaceId ?? '');
-  const workspace = workspaces.find(w => w.id === workspaceId);
+  const workspace = workspaces.find((w: Workspace) => w.id === workspaceId);
 
-  const [tasks, setTasks]                   = useState<Task[]>(board.tasks);
+  const {
+          tasks,
+          // isLoading: tasksLoading,
+          // error: tasksError,
+          fetchTasks,
+          createTask,
+          updateTask,
+          deleteTask,
+          moveTask,
+          setTasks, // Para real-time updates
+        } = useTasks();
   const [subjects, setSubjects]             = useState<Subject[]>(board.subjects);
   const [fields, setFields]                 = useState(board.fields);
   const [draggingId, setDraggingId]         = useState<string | null>(null);
@@ -873,9 +885,42 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     if (!workspaceId) return;
-    updateBoard(workspaceId, { tasks, subjects, fields });
-  }, [tasks, subjects, fields, workspaceId]);
+    fetchTasks(workspaceId);
+  }, [workspaceId, fetchTasks]);
 
+  // ✅ Real-time task listeners
+  useBoard({
+    workspaceId: workspaceId || null,
+    
+    onTaskCreated: (task) => {
+      console.log('🆕 Task created (real-time):', task.id);
+      setTasks(prev => {
+        // Evitar duplicatas
+        if (prev.some(t => t.id === task.id)) return prev;
+        return [...prev, task];
+      });
+    },
+    
+    onTaskUpdated: (task) => {
+      console.log('✏️ Task updated (real-time):', task.id);
+      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+    },
+    
+    onTaskDeleted: (taskId) => {
+      console.log('🗑️ Task deleted (real-time):', taskId);
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+    },
+    
+    onTaskMoved: (data: { taskId: string; fromStatus: string; toStatus: string }) => {
+      console.log('🔄 Task moved (real-time):', data);
+      setTasks(prev => prev.map(t => 
+        t.id === data.taskId 
+          ? { ...t, status: data.toStatus }
+          : t
+      ));
+    },
+  });
+  
   const activeFilterCount = filters.priority.length + filters.assignee.length + filters.subjectId.length;
 
   const SORT_LABELS: Record<SortOption, string> = {
@@ -891,10 +936,66 @@ export default function KanbanBoard() {
 
   const visibleTasks = sortTasks(filteredTasks, sortBy);
 
-  const handleDrop   = (newStatus: string) => { if (!draggingId) return; setTasks(prev => prev.map(t => t.id === draggingId ? { ...t, status: newStatus } : t)); setDraggingId(null); };
-  const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
-  const handleUpdate = (updated: Task) => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setSelectedTask(updated); };
-  const handleDelete = (id: string) => { setTasks(prev => prev.filter(t => t.id !== id)); setSelectedTask(null); };
+    const handleDrop = async (newStatus: string) => { 
+    if (!draggingId) return;
+    
+    const taskId = draggingId;
+    setDraggingId(null);
+    
+    try {
+      // ✅ Chamar API (optimistic update já acontece no useTasks)
+      await moveTask(taskId, newStatus);
+      console.log('✅ Task moved successfully');
+    } catch (err) {
+      console.error('❌ Failed to move task:', err);
+      // Rollback já foi feito automaticamente pelo useTasks
+    }
+  };
+    const handleCreate = async (task: Task) => {
+    if (!workspaceId) return;
+    
+    try {
+      // ✅ Chamar API para criar task
+      await createTask(workspaceId, {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        subjectId: task.subjectId,
+        dueDate: task.dueDate,
+        assigneeId: task.assignee,
+      });
+      console.log('✅ Task created successfully');
+    } catch (err) {
+      console.error('❌ Failed to create task:', err);
+    }
+  };
+    const handleUpdate = async (updated: Task) => {
+    try {
+      // ✅ Chamar API para atualizar
+      await updateTask(updated.id, {
+        title: updated.title,
+        description: updated.description,
+        priority: updated.priority,
+        assigneeId: updated.assignee,
+        dueDate: updated.dueDate,
+      });
+      setSelectedTask(updated);
+      console.log('✅ Task updated successfully');
+    } catch (err) {
+      console.error('❌ Failed to update task:', err);
+    }
+  };
+    const handleDelete = async (id: string) => {
+    try {
+      // ✅ Chamar API para deletar
+      await deleteTask(id);
+      setSelectedTask(null);
+      console.log('✅ Task deleted successfully');
+    } catch (err) {
+      console.error('❌ Failed to delete task:', err);
+    }
+  };
   const removeFilter = (key: keyof Filters, val: string) => setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
 
   return (
@@ -1025,8 +1126,8 @@ export default function KanbanBoard() {
         {/* columns */}
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
-            {fields.map(f => (
-              <KanbanColumn key={f.id} fieldId={f.id} label={f.label} color={f.color} tasks={visibleTasks.filter(t => t.status === f.id)} subjects={subjects} draggingId={draggingId} onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)} onDrop={handleDrop} onTaskClick={setSelectedTask} onAddTask={setCreateStatus} onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))} onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))} />
+            {fields.map((f: any) => ( //added any to clear error, maybe add field type
+              <KanbanColumn key={f.id} fieldId={f.id} label={f.label} color={f.color} tasks={visibleTasks.filter(t => t.status === f.id)} subjects={subjects} draggingId={draggingId} onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)} onDrop={handleDrop} onTaskClick={setSelectedTask} onAddTask={setCreateStatus} onDeleteField={id => setFields(prev => prev.filter((f: any) => f.id !== id))} onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))} />
             ))}
           </div>
         </div>
