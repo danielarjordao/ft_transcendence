@@ -9,6 +9,7 @@
     "@nestjs/websockets": "^11.1.19",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "zustand": "^5.0.13"
   }
 }

@@ -13,7 +13,11 @@ import ChatPanel from '../chat/ChatPanel';
 import { useAuth } from '../../contexts/AuthContext';
 import { workspacesService } from '../../services/workspaces.service';
 import { workspaceInvitationsService } from '../../services/workspace-invitations.service';
-import type { WorkspaceMember } from '../../types/workspace';
+import { subjectsService } from '../../services/subject.service';
+import { fieldsService } from '../../services/fields.service';
+import type { WorkspaceMember, Workspace } from '../../types/workspace';
+import { useTasks } from '../../hooks/useTasks';
+import { useBoard } from '../../hooks/useBoard';
 
 const PRESET_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
@@ -819,12 +823,22 @@ function sortTasks(tasks: Task[], sortBy: SortOption): Task[] {
 export default function KanbanBoard() {
   const { workspaceId } = useParams();
   const { user } = useAuth();
-  const { getBoard, updateBoard, workspaces } = useWorkspaceStore();
+  const { getBoard, workspaces } = useWorkspaceStore();
 
   const board     = getBoard(workspaceId ?? '');
-  const workspace = workspaces.find(w => w.id === workspaceId);
+  const workspace = workspaces.find((w: Workspace) => w.id === workspaceId);
 
-  const [tasks, setTasks]                   = useState<Task[]>(board.tasks);
+  const {
+          tasks,
+          // isLoading: tasksLoading,
+          // error: tasksError,
+          fetchTasks,
+          createTask,
+          updateTask,
+          deleteTask,
+          moveTask,
+          setTasks, // Para real-time updates
+        } = useTasks();
   const [subjects, setSubjects]             = useState<Subject[]>(board.subjects);
   const [fields, setFields]                 = useState(board.fields);
   const [draggingId, setDraggingId]         = useState<string | null>(null);
@@ -872,9 +886,59 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     if (!workspaceId) return;
-    updateBoard(workspaceId, { tasks, subjects, fields });
-  }, [tasks, subjects, fields, workspaceId]);
+    fetchTasks(workspaceId);
+  }, [workspaceId, fetchTasks]);
 
+  // Carregar subjects da API
+  useEffect(() => {
+    if (!workspaceId) return;
+    subjectsService.getAll(workspaceId)
+      .then(setSubjects)
+      .catch(() => {/* mantém os do board cache */});
+  }, [workspaceId]);
+
+  // Carregar fields da API
+  useEffect(() => {
+    if (!workspaceId) return;
+    fieldsService.getAll(workspaceId)
+      .then(setFields)
+      .catch(() => {/* mantém os do board cache */});
+  }, [workspaceId]);
+
+  // ✅ Real-time task listeners — callbacks estabilizados com useCallback
+  const handleTaskCreated = useCallback((task: Task) => {
+    console.log('🆕 Task created (real-time):', task.id);
+    setTasks(prev => {
+      if (prev.some(t => t.id === task.id)) return prev;
+      return [...prev, task];
+    });
+  }, [setTasks]);
+
+  const handleTaskUpdated = useCallback((task: Task) => {
+    console.log('✏️ Task updated (real-time):', task.id);
+    setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+  }, [setTasks]);
+
+  const handleTaskDeleted = useCallback((taskId: string) => {
+    console.log('🗑️ Task deleted (real-time):', taskId);
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  }, [setTasks]);
+
+  const handleTaskMoved = useCallback((data: { taskId: string; fromStatus: string; toStatus: string }) => {
+    console.log('🔄 Task moved (real-time):', data);
+    setTasks(prev => prev.map(t =>
+      t.id === data.taskId ? { ...t, status: data.toStatus } : t
+    ));
+  }, [setTasks]);
+
+  useBoard({
+    workspaceId: workspaceId || null,
+    onTaskCreated: handleTaskCreated,
+    onTaskUpdated: handleTaskUpdated,
+    onTaskDeleted: handleTaskDeleted,
+    onTaskMoved: handleTaskMoved,
+  });
+    
   const activeFilterCount = filters.priority.length + filters.assignee.length + filters.subjectId.length;
 
   const SORT_LABELS: Record<SortOption, string> = {
@@ -890,10 +954,66 @@ export default function KanbanBoard() {
 
   const visibleTasks = sortTasks(filteredTasks, sortBy);
 
-  const handleDrop   = (newStatus: string) => { if (!draggingId) return; setTasks(prev => prev.map(t => t.id === draggingId ? { ...t, status: newStatus } : t)); setDraggingId(null); };
-  const handleCreate = (task: Task) => setTasks(prev => [...prev, task]);
-  const handleUpdate = (updated: Task) => { setTasks(prev => prev.map(t => t.id === updated.id ? updated : t)); setSelectedTask(updated); };
-  const handleDelete = (id: string) => { setTasks(prev => prev.filter(t => t.id !== id)); setSelectedTask(null); };
+    const handleDrop = async (newStatus: string) => { 
+    if (!draggingId) return;
+    
+    const taskId = draggingId;
+    setDraggingId(null);
+    
+    try {
+      // ✅ Chamar API (optimistic update já acontece no useTasks)
+      await moveTask(taskId, newStatus);
+      console.log('✅ Task moved successfully');
+    } catch (err) {
+      console.error('❌ Failed to move task:', err);
+      // Rollback já foi feito automaticamente pelo useTasks
+    }
+  };
+    const handleCreate = async (task: Task) => {
+    if (!workspaceId) return;
+    
+    try {
+      // ✅ Chamar API para criar task
+      await createTask(workspaceId, {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        priority: task.priority,
+        subjectId: task.subjectId,
+        dueDate: task.dueDate,
+        assigneeId: task.assignee,
+      });
+      console.log('✅ Task created successfully');
+    } catch (err) {
+      console.error('❌ Failed to create task:', err);
+    }
+  };
+    const handleUpdate = async (updated: Task) => {
+    try {
+      // ✅ Chamar API para atualizar
+      await updateTask(updated.id, {
+        title: updated.title,
+        description: updated.description,
+        priority: updated.priority,
+        assigneeId: updated.assignee,
+        dueDate: updated.dueDate,
+      });
+      setSelectedTask(updated);
+      console.log('✅ Task updated successfully');
+    } catch (err) {
+      console.error('❌ Failed to update task:', err);
+    }
+  };
+    const handleDelete = async (id: string) => {
+    try {
+      // ✅ Chamar API para deletar
+      await deleteTask(id);
+      setSelectedTask(null);
+      console.log('✅ Task deleted successfully');
+    } catch (err) {
+      console.error('❌ Failed to delete task:', err);
+    }
+  };
   const removeFilter = (key: keyof Filters, val: string) => setFilters(prev => ({ ...prev, [key]: prev[key].filter(v => v !== val) }));
 
   return (
@@ -1014,7 +1134,11 @@ export default function KanbanBoard() {
               <button onClick={() => setActiveSubject(activeSubject === s.id ? null : s.id)} style={{ padding: '10px 8px 10px 12px', background: 'transparent', border: 'none', borderBottom: `2px solid ${activeSubject === s.id ? s.color : 'transparent'}`, color: activeSubject === s.id ? '#F5F5F5' : '#888888', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.color }} />{s.name}
               </button>
-              <button onClick={() => { setSubjects(prev => prev.filter(sub => sub.id !== s.id)); if (activeSubject === s.id) setActiveSubject(null); }} style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>✕</button>
+              <button onClick={async () => {
+                try { await subjectsService.delete(s.id); } catch { /* ignora */ }
+                setSubjects(prev => prev.filter(sub => sub.id !== s.id));
+                if (activeSubject === s.id) setActiveSubject(null);
+              }} style={{ background: 'transparent', border: 'none', color: '#555555', cursor: 'pointer', fontSize: '12px', padding: '0 8px 0 2px', lineHeight: 1 }}>✕</button>
             </div>
           ))}
           <button onClick={() => setShowAddSubject(true)} style={{ padding: '10px 12px', background: 'transparent', border: 'none', color: '#555555', fontSize: '13px', cursor: 'pointer' }}>+ Add Subject</button>
@@ -1024,14 +1148,35 @@ export default function KanbanBoard() {
         {/* columns */}
         <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '20px' }}>
           <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minWidth: 'max-content', height: '100%' }}>
-            {fields.map(f => (
-              <KanbanColumn key={f.id} fieldId={f.id} label={f.label} color={f.color} tasks={visibleTasks.filter(t => t.status === f.id)} subjects={subjects} draggingId={draggingId} onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)} onDrop={handleDrop} onTaskClick={setSelectedTask} onAddTask={setCreateStatus} onDeleteField={id => setFields(prev => prev.filter(f => f.id !== id))} onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))} />
+            {fields.map((f: any) => ( //added any to clear error, maybe add field type
+              <KanbanColumn key={f.id} fieldId={f.id} label={f.label} color={f.color} tasks={visibleTasks.filter(t => t.status === f.id)} subjects={subjects} draggingId={draggingId} onDragStart={setDraggingId} onDragEnd={() => setDraggingId(null)} onDrop={handleDrop} onTaskClick={setSelectedTask} onAddTask={setCreateStatus} onDeleteField={async (id) => {
+                try { await fieldsService.delete(id); } catch { /* ignora */ }
+                setFields(prev => prev.filter((f: any) => f.id !== id));
+              }} onDeleteTask={id => setTasks(prev => prev.filter(t => t.id !== id))} />
             ))}
           </div>
         </div>
 
-        {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={subject => { setSubjects(prev => [...prev, subject]); setShowAddSubject(false); }} />}
-        {showAddField   && <AddFieldModal   onClose={() => setShowAddField(false)}   onCreate={field   => { setFields(prev => [...prev, field]);     setShowAddField(false);   }} />}
+        {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} onCreate={async (subject) => {
+          if (!workspaceId) return;
+          try {
+            const created = await subjectsService.create(workspaceId, { name: subject.name, color: subject.color });
+            setSubjects(prev => [...prev, created]);
+          } catch {
+            setSubjects(prev => [...prev, subject]); // fallback local se API falhar
+          }
+          setShowAddSubject(false);
+        }} />}
+        {showAddField && <AddFieldModal onClose={() => setShowAddField(false)} onCreate={async (field) => {
+          if (!workspaceId) return;
+          try {
+            const created = await fieldsService.create(workspaceId, { label: field.label, color: field.color, order: fields.length });
+            setFields(prev => [...prev, created]);
+          } catch {
+            setFields(prev => [...prev, field]); // fallback local se API falhar
+          }
+          setShowAddField(false);
+        }} />}
         {selectedTask   && <TaskDetailModal task={selectedTask} subjects={subjects} members={members} onClose={() => setSelectedTask(null)} onUpdate={handleUpdate} onDelete={handleDelete} />}
         {createStatus !== null && <CreateTaskModal initialStatus={createStatus} subjects={subjects} fields={fields} members={members} onClose={() => setCreateStatus(null)} onCreate={handleCreate} />}
       </div>

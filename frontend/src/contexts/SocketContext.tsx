@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 import socketService from '../services/socket.service';
-import { useAuthStore } from '../store/auth.store';
+import { useAuthStore, type AuthState } from '../store/auth.store';
 
 interface SocketContextValue {
   isConnected: boolean;
@@ -14,7 +14,7 @@ const SocketContext = createContext<SocketContextValue | undefined>(undefined);
 
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const accessToken = useAuthStore((state) => state.accessToken);
+  const accessToken = useAuthStore((state:AuthState) => state.accessToken);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -27,7 +27,6 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     console.log('🔌 Socket: Connecting with token...');
     socketService.connect(accessToken);
 
-    // Listeners para atualizar estado de conexão
     const handleConnect = () => {
       console.log('✅ Socket: Connected!');
       setIsConnected(true);
@@ -42,12 +41,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       console.error('🔴 Socket: Connection error:', error);
     };
 
-    // Registrar listeners
     socketService.on('connect' as any, handleConnect);
     socketService.on('disconnect' as any, handleDisconnect);
     socketService.on('connect_error' as any, handleConnectError);
 
-    // Cleanup ao desmontar
     return () => {
       socketService.off('connect' as any, handleConnect);
       socketService.off('disconnect' as any, handleDisconnect);
