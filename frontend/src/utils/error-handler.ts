@@ -1,3 +1,5 @@
+import { isAxiosError } from 'axios';
+
 export function getErrorMessage(err: unknown, fallback = 'Something went wrong'): string {
   // Erro Axios com resposta do backend
   if (isAxiosError(err)) {

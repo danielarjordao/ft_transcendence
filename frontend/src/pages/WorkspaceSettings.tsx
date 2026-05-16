@@ -3,27 +3,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { workspaceInvitationsService } from '../services/workspace-invitations.service';
+import { workspacesService } from '../services/workspaces.service';
+import type { WorkspaceMember, WorkspaceRole } from '../types/workspace';
 import { useWorkspaceStore } from '../store/workspace.store';
 import { useSocket } from '../contexts/SocketContext';
 
 const ACCENT_COLORS = [
   '#7B68EE', '#4A90D9', '#50C878', '#FFA500',
   '#FF6B6B', '#E87D7D', '#4ECDC4', '#9B8EC4',
-];
-
-interface Member {
-  id: string;
-  username: string;
-  email: string;
-  role: 'Admin' | 'Moderator' | 'Member';
-  isCreator: boolean;
-}
-
-const MOCK_MEMBERS: Member[] = [
-  { id: 'm1', username: 'ana_laura',  email: 'ana@42.fr',     role: 'Admin',  isCreator: true  },
-  { id: 'm2', username: 'lucas_dev',  email: 'lucas@42.fr',   role: 'Member', isCreator: false },
-  { id: 'm3', username: 'daniela_be', email: 'daniela@42.fr', role: 'Member', isCreator: false },
-  { id: 'm4', username: 'murilo_db',  email: 'murilo@42.fr',  role: 'Member', isCreator: false },
 ];
 
 // ── confirm modal ─────────────────────────────────────────────────────────────
@@ -76,7 +63,8 @@ export default function WorkspaceSettings() {
   const [accent, setAccent]               = useState(workspace?.accent ?? ACCENT_COLORS[0]);
   const [nameError, setNameError]         = useState('');
   const [nameSaved, setNameSaved]         = useState(false);
-  const [members, setMembers]             = useState<Member[]>(MOCK_MEMBERS);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
   const { socket, isConnected } = useSocket();
   const [addInput, setAddInput]           = useState('');
   const [inviteRole, setInviteRole]       = useState<'member' | 'admin'>('member');
@@ -88,6 +76,15 @@ export default function WorkspaceSettings() {
     memberId?: string;
     memberName?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    setMembersLoading(true);
+    workspacesService.listMembers(workspaceId)
+      .then(setMembers)
+      .catch(() => setMembers([]))
+      .finally(() => setMembersLoading(false));
+  }, [workspaceId]);
 
   if (!workspace) {
     return (
@@ -149,8 +146,13 @@ export default function WorkspaceSettings() {
     }
   };
 
-  const handleRemoveMember = (id: string) => {
-    setMembers(prev => prev.filter(m => m.id !== id));
+  const handleRemoveMember = async (userId: string) => {
+    try {
+      await workspacesService.removeMember(workspaceId!, userId);
+      setMembers(prev => prev.filter(m => m.userId !== userId));
+    } catch {
+      // manter lista como está se falhar
+    }
     setConfirm(null);
   };
 
@@ -174,7 +176,7 @@ useEffect(() => {
     
     setMembers(prev => {
       // Evitar duplicatas
-      if (prev.some(m => m.id === member.userId)) return prev;
+      if (prev.some(m => m.userId === member.userId)) return prev;
       return [...prev, member];
     });
   };
@@ -183,19 +185,19 @@ useEffect(() => {
   const handleMemberRemoved = (data: { userId: string }) => {
     console.log('👤 Member removed (real-time):', data.userId);
     
-    setMembers(prev => prev.filter(m => m.id !== data.userId));
+    setMembers(prev => prev.filter(m => m.userId !== data.userId));
   };
 
   // ✅ LISTENER: member:role_updated
-const handleMemberRoleUpdated = (data: { userId: string; newRole: string }) => {
-  console.log('🔄 Member role updated (real-time):', data);
-  
-  setMembers(prev => prev.map(m => 
-    m.id === data.userId 
-      ? { ...m, role: data.newRole as 'Admin' | 'Moderator' | 'Member' }
-      : m
-  ));
-};
+  const handleMemberRoleUpdated = (data: { userId: string; newRole: string }) => {
+    console.log('🔄 Member role updated (real-time):', data);
+    
+    setMembers(prev => prev.map(m => 
+      m.userId === data.userId 
+        ? { ...m, role: data.newRole as WorkspaceRole }
+        : m
+    ));
+  };
     // Registrar listeners
     socket.on('member:added', handleMemberAdded);
     socket.on('member:removed', handleMemberRemoved);
@@ -332,28 +334,31 @@ const handleMemberRoleUpdated = (data: { userId: string; newRole: string }) => {
 
             {/* member list */}
             <div style={{ border: '1px solid #2A2A2A', borderRadius: 8, overflow: 'hidden' }}>
-              {members.map((m, i) => (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < members.length - 1 ? '1px solid #222' : 'none' }}>
+              {membersLoading && (
+                <p style={{ color: '#666', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>Loading members...</p>
+              )}
+              {!membersLoading && members.map((m, i) => (
+                <div key={m.userId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderBottom: i < members.length - 1 ? '1px solid #222' : 'none' }}>
                   <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#2A2A2A', border: '1px solid #3A3A3A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <span style={{ color: '#CCC', fontSize: 12, fontWeight: 700 }}>
-                      {m.username.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2)}
+                      {(m.fullName || m.username).split(/[\s_]/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)}
                     </span>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 500 }}>@{m.username}</p>
-                    <p style={{ color: '#555', fontSize: 11 }}>{m.email}</p>
+                    <p style={{ color: '#555', fontSize: 11 }}>{m.fullName}</p>
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: 600,
-                    color: m.role === 'Admin' ? '#7B68EE' : m.role === 'Moderator' ? '#4A90D9' : '#555',
+                    color: m.role === 'owner' ? '#FFA500' : m.role === 'admin' ? '#7B68EE' : '#555',
                     textTransform: 'uppercase', letterSpacing: '0.05em',
                     flexShrink: 0,
                   }}>
-                    {m.role}{m.isCreator && ' 🔒'}
+                    {m.role}{m.role === 'owner' && ' 🔒'}
                   </span>
-                  {!m.isCreator && (
+                  {m.role !== 'owner' && (
                     <button
-                      onClick={() => setConfirm({ type: 'remove_member', memberId: m.id, memberName: m.username })}
+                      onClick={() => setConfirm({ type: 'remove_member', memberId: m.userId, memberName: m.username })}
                       style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #2A2A2A', background: 'transparent', color: '#555', fontSize: 12, cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit' }}
                       onMouseEnter={e => { e.currentTarget.style.borderColor = '#FF6B6B44'; e.currentTarget.style.color = '#FF6B6B'; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = '#2A2A2A'; e.currentTarget.style.color = '#555'; }}
