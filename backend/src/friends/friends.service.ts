@@ -88,6 +88,24 @@ export class FriendsService {
         OR: [{ senderId: userId }, { receiverId: userId }],
       },
       orderBy: { createdAt: 'desc' },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+        receiver: {
+          select: {
+            id: true,
+            username: true,
+            fullName: true,
+            avatarUrl: true,
+          },
+        },
+      },
     });
   }
 
@@ -155,35 +173,37 @@ export class FriendsService {
 
     if (!request) throw new NotFoundException('Friend request not found');
 
-    // Security Check: Only the receiver can accept or reject the request.
-    if (request.receiverId !== userId) {
-      throw new ForbiddenException(
-        'You can only respond to requests sent to you',
-      );
-    }
-
     if (dto.action === 'reject') {
+      if (request.receiverId !== userId && request.senderId !== userId) {
+        throw new ForbiddenException('You cannot modify this request');
+      }
+
       await this.prisma.friendRequest.delete({ where: { id: requestId } });
 
-      // Alert the sender that their request was rejected
-      this.appGateway.server
-        .to(`user:${request.senderId}`)
-        .emit('friend_request_updated', {
-          id: request.id,
-          senderId: request.senderId,
-          receiverId: request.receiverId,
-          status: 'rejected',
-          createdAt: request.createdAt.toISOString(),
-        });
+      if (request.receiverId === userId) {
+        this.appGateway.server
+          .to(`user:${request.senderId}`)
+          .emit('friend_request_updated', {
+            id: request.id,
+            senderId: request.senderId,
+            receiverId: request.receiverId,
+            status: 'rejected',
+            createdAt: request.createdAt.toISOString(),
+          });
 
-      await this.notificationsService.create(request.senderId, {
-        type: NotificationType.FRIEND_REQUEST,
-        title: 'Friend Request Declined',
-        message: 'Your friend request was declined.',
-        resource: { requestId: request.id },
-      });
+        await this.notificationsService.create(request.senderId, {
+          type: NotificationType.FRIEND_REQUEST,
+          title: 'Friend Request Declined',
+          message: 'Your friend request was declined.',
+          resource: { requestId: request.id },
+        });
+      }
 
       return { status: 'rejected' };
+    }
+
+    if (request.receiverId !== userId) {
+      throw new ForbiddenException('You can only accept requests sent to you');
     }
 
     const { userAId, userBId } = this.sortIds(
