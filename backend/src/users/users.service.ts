@@ -47,29 +47,35 @@ export class UsersService {
   }
 
   async getMe(userId: string) {
-    // Explicit selection ensures no sensitive authentication data is exposed to the client,
-    // strictly adhering to the API.md contract for GET /api/users/me.
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        username: true,
-        bio: true,
-        avatarUrl: true,
-        accountType: true,
-        twoFactorEnabled: true,
-        preferences: true,
-        createdAt: true,
-      },
-    });
+    const [user, assignedTasksCount] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          username: true,
+          bio: true,
+          avatarUrl: true,
+          accountType: true,
+          twoFactorEnabled: true,
+          preferences: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.task.count({
+        where: { assigneeId: userId },
+      }),
+    ]);
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return {
+      ...user,
+      assignedTasksCount,
+    };
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
