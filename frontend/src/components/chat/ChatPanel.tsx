@@ -5,6 +5,8 @@ import MessageList from './MessageList';
 import MessageInput from './MessageInput';
 import { useChat } from '../../hooks/useChat';
 import { MOCK_CONVERSATIONS } from '../../constants/chat';
+import { chatService } from '../../services/chat.service';
+import type { Conversation } from '../../types/chat';
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -33,7 +35,7 @@ const MOCK_SEED: Record<string, { senderId: string; senderName: string; content:
 
 export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelProps) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  
+  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
   // ===== HOOK COM SOCKET.IO =====
   const {
     messages,
@@ -61,6 +63,14 @@ export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelP
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+    useEffect(() => {
+    if (!isOpen) return;
+    chatService.getConversations()
+      .then(setConversations)
+      .catch(() => {
+        // backend ainda não disponível — mantém os mocks
+      });
+  }, [isOpen]);
 
   // ===== JOIN/LEAVE ROOM quando selecionar conversa =====
   useEffect(() => {
@@ -75,7 +85,7 @@ export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelP
   }, [selectedConversationId, joinRoom, leaveRoom]);
 
   // ===== HANDLERS =====
-  const selectedConversation = MOCK_CONVERSATIONS.find(c => c.id === selectedConversationId);
+const selectedConversation = conversations.find(c => c.id === selectedConversationId);
   const currentMessages = selectedConversationId ? (messages[selectedConversationId] ?? []) : [];
   
   // Verificar se alguém está digitando nesta room
@@ -148,7 +158,7 @@ export default function ChatPanel({ isOpen, onClose, currentUserId }: ChatPanelP
         </>
       ) : (
         <ConversationList
-          conversations={MOCK_CONVERSATIONS}
+          conversations={conversations}
           onSelectConversation={setSelectedConversationId}
           onClose={onClose}
         />
