@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Navbar from '../components/layout/Navbar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import ChatPanel from '../components/chat/ChatPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
- 
+import { friendsService } from '../services/friends.service';
+
 // ── tipos ─────────────────────────────────────────────────────────────────────
- 
+
 interface Friend {
   id: string;
   username: string;
@@ -15,7 +16,7 @@ interface Friend {
   online: boolean;
   addedAt: string;
 }
- 
+
 interface FriendRequest {
   id: string;
   username: string;
@@ -23,28 +24,11 @@ interface FriendRequest {
   avatarUrl: string | null;
   sentAt: string;
 }
- 
+
 type Tab = 'friends' | 'pending' | 'sent';
- 
-// ── mock data ─────────────────────────────────────────────────────────────────
- 
-const MOCK_FRIENDS: Friend[] = [
-  { id: 'u1', username: 'lucas_dev',  fullName: 'Lucas',   avatarUrl: null, online: true,  addedAt: 'Mar 10' },
-  { id: 'u2', username: 'daniela_be', fullName: 'Daniela', avatarUrl: null, online: true,  addedAt: 'Mar 12' },
-  { id: 'u3', username: 'murilo_db',  fullName: 'Murilo',  avatarUrl: null, online: false, addedAt: 'Mar 14' },
-];
- 
-const MOCK_RECEIVED: FriendRequest[] = [
-  { id: 'r1', username: 'joao_42',    fullName: 'João',    avatarUrl: null, sentAt: '2h ago'    },
-  { id: 'r2', username: 'carla_dev',  fullName: 'Carla',   avatarUrl: null, sentAt: 'Yesterday' },
-];
- 
-const MOCK_SENT: FriendRequest[] = [
-  { id: 's1', username: 'pedro_ui',   fullName: 'Pedro',   avatarUrl: null, sentAt: '1d ago'    },
-];
- 
+
 // ── avatar ────────────────────────────────────────────────────────────────────
- 
+
 function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
   const initials = name.split('_').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   return (
@@ -57,17 +41,19 @@ function UserAvatar({ name, size = 40 }: { name: string; size?: number }) {
     </div>
   );
 }
- 
+
 // ── componente principal ──────────────────────────────────────────────────────
- 
+
+// ── componente principal ──────────────────────────────────────────────────────
+
 export default function Friends() {
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
- 
+
   const [tab, setTab]                   = useState<Tab>('friends');
-  const [friends, setFriends]           = useState<Friend[]>(MOCK_FRIENDS);
-  const [received, setReceived]         = useState<FriendRequest[]>(MOCK_RECEIVED);
-  const [sent, setSent]                 = useState<FriendRequest[]>(MOCK_SENT);
+  const [friends, setFriends]           = useState<Friend[]>([]);
+  const [received, setReceived]         = useState<FriendRequest[]>([]);
+  const [sent, setSent]                 = useState<FriendRequest[]>([]);
   const [search, setSearch]             = useState('');
   const [addInput, setAddInput]         = useState('');
   const [addError, setAddError]         = useState('');
@@ -75,25 +61,64 @@ export default function Friends() {
   const [profileOpen, setProfileOpen]   = useState(false);
   const [chatOpen, setChatOpen]         = useState(false);
   const [_chatFriendId, setChatFriendId] = useState<string | null>(null);
- 
+
+  // Envolvemos a função no useCallback
+  const loadFriends = useCallback(async () => {
+    try {
+      const friendsData = await friendsService.getFriends();
+      const requestsData = await friendsService.getFriendRequests();
+
+      setFriends(friendsData.map(f => ({
+        id: f.id,
+        username: f.username,
+        fullName: f.fullName || f.username,
+        avatarUrl: f.avatarUrl,
+        online: f.status === 'online',
+        addedAt: 'Recent'
+      })));
+
+      setReceived(requestsData.filter(p => p.senderId !== user?.id).map(p => ({
+        id: p.id,
+        username: p.sender?.username || 'Unknown',
+        fullName: p.sender?.fullName || 'Unknown',
+        avatarUrl: p.sender?.avatarUrl || null,
+        sentAt: 'Pending'
+      })));
+
+      setSent(requestsData.filter(p => p.senderId === user?.id).map(p => ({
+        id: p.id,
+        username: p.receiver?.username || 'Unknown',
+        fullName: p.receiver?.fullName || 'Unknown',
+        avatarUrl: p.receiver?.avatarUrl || null,
+        sentAt: 'Pending'
+      })));
+    } catch (error) {
+      console.error("Error loading friends:", error);
+    }
+  }, [user?.id]); // Array de dependências da função
+
+  useEffect(() => {
+    if (user?.id) loadFriends();
+  }, [user?.id, loadFriends]); // loadFriends agora está aqui de forma segura
+
   // ===== TRACK ONLINE USERS =====
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
- 
+
   // ===== LISTENERS DE SOCKET.IO =====
   useEffect(() => {
     if (!isConnected) {
       console.log('⚠️ Friends: Socket not connected, online status unavailable');
       return;
     }
- 
+
     console.log('🟢 Friends: Registering online/offline listeners');
- 
+
     // Listener: user:online
     const handleUserOnline = (userId: string) => {
       console.log('✅ User online:', userId);
       setOnlineUserIds(prev => new Set(prev).add(userId));
     };
- 
+
     // Listener: user:offline
     const handleUserOffline = (userId: string) => {
       console.log('❌ User offline:', userId);
@@ -103,11 +128,11 @@ export default function Friends() {
         return next;
       });
     };
- 
+
     // Registrar listeners
     socket.on('user:online', handleUserOnline);
     socket.on('user:offline', handleUserOffline);
- 
+
     // Cleanup
     return () => {
       console.log('🔴 Friends: Removing online/offline listeners');
@@ -115,7 +140,7 @@ export default function Friends() {
       socket.off('user:offline', handleUserOffline);
     };
   }, [isConnected, socket]);
- 
+
   // ===== CALCULAR STATUS ONLINE (mock + socket) =====
   const getFriendOnlineStatus = (friendId: string): boolean => {
     // Se socket conectado, usar dados em tempo real
@@ -126,79 +151,60 @@ export default function Friends() {
     const friend = friends.find(f => f.id === friendId);
     return friend?.online ?? false;
   };
- 
+
   const onlineCount = friends.filter(f => getFriendOnlineStatus(f.id)).length;
   const pendingCount = received.length;
- 
+
   const filteredFriends = friends.filter(f =>
     f.username.toLowerCase().includes(search.toLowerCase()) ||
     f.fullName.toLowerCase().includes(search.toLowerCase())
   );
- 
+
   // ── handlers ─────────────────────────────────────────────────────────────
- 
-  const handleAdd = () => {
+
+  const handleAdd = async () => {
     const username = addInput.trim().toLowerCase();
     if (!username) return;
-    if (friends.some(f => f.username === username)) {
-      setAddError('This user is already your friend.');
-      setAddSuccess('');
-      return;
+
+    try {
+      await friendsService.sendRequest(username);
+      setAddInput('');
+      setAddError('');
+      setAddSuccess(`Friend request sent to @${username}.`);
+      loadFriends();
+      setTimeout(() => setAddSuccess(''), 3000);
+    } catch (err: any) {
+      setAddError(err.response?.data?.message || 'Failed to send request.');
     }
-    if (sent.some(r => r.username === username)) {
-      setAddError('You already sent a request to this user.');
-      setAddSuccess('');
-      return;
-    }
-    // TODO: POST /api/friends/request { username }
-    setSent(prev => [...prev, {
-      id: `s${Date.now()}`,
-      username,
-      fullName: username,
-      avatarUrl: null,
-      sentAt: 'Just now',
-    }]);
-    setAddInput('');
-    setAddError('');
-    setAddSuccess(`Friend request sent to @${username}.`);
-    setTimeout(() => setAddSuccess(''), 3000);
   };
- 
-  const handleRemoveFriend = (id: string) => {
-    // TODO: DELETE /api/friends/:id
-    setFriends(prev => prev.filter(f => f.id !== id));
+
+  const handleRemoveFriend = async (id: string) => {
+    await friendsService.removeFriend(id);
+    loadFriends();
   };
- 
-  const handleAccept = (req: FriendRequest) => {
-    // TODO: POST /api/friends/request/:id/accept
-    setReceived(prev => prev.filter(r => r.id !== req.id));
-    setFriends(prev => [...prev, {
-      id: req.id,
-      username: req.username,
-      fullName: req.fullName,
-      avatarUrl: req.avatarUrl,
-      online: false,
-      addedAt: 'Just now',
-    }]);
+
+  const handleAccept = async (req: FriendRequest) => {
+    await friendsService.acceptRequest(req.id);
+    loadFriends();
   };
- 
-  const handleDecline = (id: string) => {
-    // TODO: POST /api/friends/request/:id/decline
-    setReceived(prev => prev.filter(r => r.id !== id));
+
+  const handleDecline = async (id: string) => {
+    await friendsService.rejectRequest(id);
+    loadFriends();
   };
- 
-  const handleCancelRequest = (id: string) => {
-    // TODO: DELETE /api/friends/request/:id
-    setSent(prev => prev.filter(r => r.id !== id));
+
+  const handleCancelRequest = async (id: string) => {
+    await friendsService.rejectRequest(id);
+    loadFriends();
   };
- 
+
   const handleOpenChat = (friendId: string) => {
     setChatFriendId(friendId);
     setChatOpen(true);
   };
- 
+
   // ── estilos compartilhados ────────────────────────────────────────────────
- 
+
   const cardStyle = {
     background: '#1A1A1A',
     border: '1px solid #2A2A2A',
@@ -208,7 +214,7 @@ export default function Friends() {
     alignItems: 'center',
     gap: 14,
   } as const;
- 
+
   const btnBase = {
     padding: '6px 12px',
     borderRadius: 6,
@@ -218,7 +224,7 @@ export default function Friends() {
     cursor: 'pointer',
     fontFamily: 'inherit',
   } as const;
- 
+
   return (
     <div style={{
       height: '100vh', display: 'flex', flexDirection: 'column',
@@ -226,9 +232,9 @@ export default function Friends() {
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
       <Navbar onOpenProfile={() => setProfileOpen(true)} />
- 
+
       <div style={{ flex: 1, overflowY: 'auto', padding: '32px 24px', maxWidth: 680, width: '100%', margin: '0 auto' }}>
- 
+
         {/* header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ color: '#EEEEEE', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Friends</h1>
@@ -240,7 +246,7 @@ export default function Friends() {
             )}
           </p>
         </div>
- 
+
         {/* add friend */}
         <div style={{ background: '#1A1A1A', border: '1px solid #2A2A2A', borderRadius: 12, padding: '18px 20px', marginBottom: 24 }}>
           <p style={{ color: '#EEEEEE', fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Add a friend</p>
@@ -263,7 +269,7 @@ export default function Friends() {
           {addError   && <p style={{ color: '#FF6B6B', fontSize: 12, marginTop: 8 }}>{addError}</p>}
           {addSuccess && <p style={{ color: '#50C878', fontSize: 12, marginTop: 8 }}>{addSuccess}</p>}
         </div>
- 
+
         {/* tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #2A2A2A', marginBottom: 20 }}>
           {([
@@ -294,7 +300,7 @@ export default function Friends() {
             </button>
           ))}
         </div>
- 
+
         {/* ── aba friends ── */}
         {tab === 'friends' && (
           <>
@@ -317,11 +323,11 @@ export default function Friends() {
                       <div style={{ position: 'relative', flexShrink: 0 }}>
                         <UserAvatar name={friend.username} size={40} />
                         {/* Badge dinâmico */}
-                        <span style={{ 
-                          position: 'absolute', bottom: 1, right: 1, 
-                          width: 10, height: 10, borderRadius: '50%', 
-                          background: isOnline ? '#50C878' : '#444', 
-                          border: '2px solid #1A1A1A' 
+                        <span style={{
+                          position: 'absolute', bottom: 1, right: 1,
+                          width: 10, height: 10, borderRadius: '50%',
+                          background: isOnline ? '#50C878' : '#444',
+                          border: '2px solid #1A1A1A'
                         }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -329,10 +335,10 @@ export default function Friends() {
                         <p style={{ color: '#666', fontSize: 12 }}>@{friend.username} · added {friend.addedAt}</p>
                       </div>
                       {/* Status dinâmico */}
-                      <span style={{ 
-                        fontSize: 11, fontWeight: 600, 
-                        color: isOnline ? '#50C878' : '#555', 
-                        flexShrink: 0 
+                      <span style={{
+                        fontSize: 11, fontWeight: 600,
+                        color: isOnline ? '#50C878' : '#555',
+                        flexShrink: 0
                       }}>
                         {isOnline ? 'Online' : 'Offline'}
                       </span>
@@ -361,7 +367,7 @@ export default function Friends() {
             )}
           </>
         )}
- 
+
         {/* ── aba pending ── */}
         {tab === 'pending' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -398,7 +404,7 @@ export default function Friends() {
             ))}
           </div>
         )}
- 
+
         {/* ── aba sent ── */}
         {tab === 'sent' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -428,9 +434,9 @@ export default function Friends() {
             ))}
           </div>
         )}
- 
+
       </div>
- 
+
       <ProfilePanel open={profileOpen} onClose={() => setProfileOpen(false)} />
       <ChatPanel
         isOpen={chatOpen}
