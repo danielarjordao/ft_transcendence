@@ -100,4 +100,15 @@ export const tasksService = {
   async delete(taskId: string): Promise<void> {
     await api.delete(`/tasks/${taskId}`);
   },
+
+  // Upload the attachments for a task
+  async uploadAttachments(taskId: string, files: File[]): Promise<any> {
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+
+    const response = await api.post(`/tasks/${taskId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
 };
