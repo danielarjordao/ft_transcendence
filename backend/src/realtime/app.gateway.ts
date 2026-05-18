@@ -9,6 +9,7 @@ import {
 import { Server } from 'socket.io';
 import type { AuthenticatedSocket } from './interfaces/authenticated-socket.interface';
 import type { JwtPayload } from './interfaces/jwt-payload.interface';
+import { PrismaService } from '../prisma/prisma.service';
 
 // The AppGateway acts strictly as the connection manager and security gatekeeper.
 @WebSocketGateway({
@@ -29,7 +30,10 @@ export class AppGateway
 
   private readonly logger = new Logger(AppGateway.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   // Fail-Fast: Ensure critical environment variables are present on startup.
   onModuleInit() {
@@ -79,6 +83,13 @@ export class AppGateway
       // Architectural Requirement: Automatically join the user's global personal room
       await client.join(`user:${userId}`);
 
+      // Update presence status in the database and notify friends of the change
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { isOnline: true },
+      });
+      await this.notifyPresenceChange(userId, 'online');
+
       this.logger.log(`Client connected: ${client.id} | User: ${userId}`);
     } catch (error: unknown) {
       const errorMessage =
@@ -95,10 +106,40 @@ export class AppGateway
     }
   }
 
-  handleDisconnect(client: AuthenticatedSocket) {
+  async handleDisconnect(client: AuthenticatedSocket) {
     const userId = client.data?.user?.id;
+
+    if (userId) {
+      try {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { isOnline: false },
+        });
+        await this.notifyPresenceChange(userId, 'offline');
+      } catch (error) {
+        this.logger.error(
+          `Failed to update offline status for user ${userId}`,
+          error,
+        );
+      }
+    }
+
     this.logger.log(
       `Client disconnected: ${client.id} | User: ${userId || 'Unknown'}`,
     );
+  }
+
+  // Real-time Presence Updates: Notify friends when a user goes online or offline.
+  async notifyPresenceChange(userId: string, status: 'online' | 'offline') {
+    const friendships = await this.prisma.friendship.findMany({
+      where: { OR: [{ userAId: userId }, { userBId: userId }] },
+    });
+
+    for (const f of friendships) {
+      const friendId = f.userAId === userId ? f.userBId : f.userAId;
+      this.server
+        .to(`user:${friendId}`)
+        .emit('friend_presence_changed', { userId, status });
+    }
   }
 }
