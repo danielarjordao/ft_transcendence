@@ -633,7 +633,7 @@ function CreateTaskModal({ initialStatus, subjects, fields, members, onClose, on
   fields: { id: string; label: string; color: string }[];
   members: WorkspaceMember[];
   onClose: () => void;
-  onCreate: (task: Task) => void;
+  onCreate: (task: Task, files: File[]) => void;
 }) {
   const [title, setTitle]                 = useState('');
   const [description, setDesc]            = useState('');
@@ -658,7 +658,13 @@ function CreateTaskModal({ initialStatus, subjects, fields, members, onClose, on
 
   const handleCreate = () => {
     if (!title.trim()) return;
-    onCreate({ id: `t${Date.now()}`, title: title.trim(), description: description.trim(), status, priority, subjectId: subjectId || undefined, dueDate: dueDate || undefined, assignee: assignee || undefined, attachments: attachedFiles.filter(f => !f.error).map(f => ({ name: f.file.name, type: f.file.type })), comments: [] });
+
+    const validFiles = attachedFiles.filter(f => !f.error).map(f => f.file);
+
+    onCreate(
+      { id: `t${Date.now()}`, title: title.trim(), description: description.trim(), status, priority, subjectId: subjectId || undefined, dueDate: dueDate || undefined, assignee: assignee || undefined, attachments: [], comments: [] },
+      validFiles
+    );
     onClose();
   };
 
@@ -938,7 +944,7 @@ export default function KanbanBoard() {
     onTaskDeleted: handleTaskDeleted,
     onTaskMoved: handleTaskMoved,
   });
-    
+
   const activeFilterCount = filters.priority.length + filters.assignee.length + filters.subjectId.length;
 
   const SORT_LABELS: Record<SortOption, string> = {
@@ -954,12 +960,12 @@ export default function KanbanBoard() {
 
   const visibleTasks = sortTasks(filteredTasks, sortBy);
 
-    const handleDrop = async (newStatus: string) => { 
+    const handleDrop = async (newStatus: string) => {
     if (!draggingId) return;
-    
+
     const taskId = draggingId;
     setDraggingId(null);
-    
+
     try {
       // ✅ Chamar API (optimistic update já acontece no useTasks)
       await moveTask(taskId, newStatus);
@@ -971,7 +977,7 @@ export default function KanbanBoard() {
   };
     const handleCreate = async (task: Task) => {
     if (!workspaceId) return;
-    
+
     try {
       // ✅ Chamar API para criar task
       await createTask(workspaceId, {
