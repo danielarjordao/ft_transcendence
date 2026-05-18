@@ -106,41 +106,45 @@ export default function Friends() {
 
   // ===== LISTENERS DE SOCKET.IO =====
   useEffect(() => {
-    if (!isConnected) {
+    if (!isConnected || !socket) {
       console.log('⚠️ Friends: Socket not connected, online status unavailable');
       return;
     }
 
-    console.log('🟢 Friends: Registering online/offline listeners');
+    console.log('🟢 Friends: Registering presence listener');
 
-    // Listener: user:online
-    const handleUserOnline = (userId: string) => {
-      console.log('✅ User online:', userId);
-      setOnlineUserIds(prev => new Set(prev).add(userId));
-    };
+    const handlePresenceChange = (data: { userId: string; status: 'online' | 'offline' }) => {
+      console.log(`Presence changed: ${data.userId} is now ${data.status}`);
 
-    // Listener: user:offline
-    const handleUserOffline = (userId: string) => {
-      console.log('❌ User offline:', userId);
       setOnlineUserIds(prev => {
         const next = new Set(prev);
-        next.delete(userId);
+        if (data.status === 'online') {
+          next.add(data.userId);
+        } else {
+          next.delete(data.userId);
+        }
         return next;
       });
+
+      setFriends(prevFriends =>
+        prevFriends.map(friend =>
+          friend.id === data.userId
+            ? { ...friend, online: data.status === 'online' }
+            : friend
+        )
+      );
     };
 
-    // Registrar listeners
-    socket.on('user:online', handleUserOnline);
-    socket.on('user:offline', handleUserOffline);
+    // Registrar o evento correto
+    socket.on('friend_presence_changed', handlePresenceChange);
 
     // Cleanup
     return () => {
-      console.log('🔴 Friends: Removing online/offline listeners');
-      socket.off('user:online', handleUserOnline);
-      socket.off('user:offline', handleUserOffline);
+      console.log('🔴 Friends: Removing presence listener');
+      socket.off('friend_presence_changed', handlePresenceChange);
     };
   }, [isConnected, socket]);
-
+  
   // ===== CALCULAR STATUS ONLINE (mock + socket) =====
   const getFriendOnlineStatus = (friendId: string): boolean => {
     // Se socket conectado, usar dados em tempo real
