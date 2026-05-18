@@ -256,18 +256,4 @@ export class FriendsService {
 
     return friendshipResponse;
   }
-
-  // Real-time Presence Updates: Notify friends when a user goes online or offline.
-  async notifyPresenceChange(userId: string, status: 'online' | 'offline') {
-    const friendships = await this.prisma.friendship.findMany({
-      where: { OR: [{ userAId: userId }, { userBId: userId }] },
-    });
-
-    for (const f of friendships) {
-      const friendId = f.userAId === userId ? f.userBId : f.userAId;
-      this.appGateway.server
-        .to(`user:${friendId}`)
-        .emit('friend_presence_changed', { userId, status });
-    }
-  }
 }
